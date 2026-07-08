@@ -267,6 +267,7 @@ async function submitDelete() {
 function bindEvents() {
   $('btnSave').addEventListener('click', saveToken);
   $('btnTestAlert').addEventListener('click', sendTestAlert);
+  $('btnSecurity').addEventListener('click', () => openModal('securityModal'));
   $('btnNew').addEventListener('click', openCreate);
   $('btnCreateSubmit').addEventListener('click', submitCreate);
   $('btnEditSubmit').addEventListener('click', submitEdit);

@@ -16,6 +16,7 @@
       <button class="btn sm" id="btnSave">保存</button>
     </div>
     <button class="btn ghost" id="btnTestAlert">📨 测试告警</button>
+    <button class="btn ghost" id="btnSecurity">🔒 安全</button>
     <button class="btn" id="btnNew">+ 新建客户端</button>
   </header>
 
@@ -85,6 +86,31 @@
         <button class="btn ghost" data-close="editModal">取消</button>
         <button class="btn" id="btnEditSubmit">保存</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Security / deploy notes modal -->
+  <div class="modal-bg" id="securityModal">
+    <div class="modal">
+      <h2>🔒 部署与安全说明</h2>
+      <div class="sec-body">
+        <p>本面板默认已具备多层防护，无需 Cloudflare（"CF 盾"）即可安全自托管：</p>
+        <ul>
+          <li><b>源站不直连</b>：生产部署中 Server 端口仅绑定 <code>127.0.0.1</code>，外部只能经 Nginx 反代访问 Node 进程。</li>
+          <li><b>传输加密</b>：由 Nginx/certbot 提供 TLS；后台接口强制 <code>X-Forwarded-Proto: https</code>，HTTP 直连返回 403。</li>
+          <li><b>强口令校验</b>：启动时拒绝空值 / 默认值 / &lt;16 位的 <code>ADMIN_TOKEN</code>，强制强口令。</li>
+          <li><b>CSP 防护</b>：<code>default-src 'self'</code>，从根上阻断 XSS 窃取 Token 的路径。</li>
+          <li><b>独立鉴权</b>：受控端上报走独立的 <code>AGENT_TOKEN</code>，与管理端分离。</li>
+          <li><b>接口限流</b>：Nginx 已对 <code>/api/</code> 统一限流，挡 admin token 爆破与高频重放；<code>/api/report</code> 另有独立限流。</li>
+        </ul>
+        <p><b>进一步硬化（可选，强烈推荐）</b></p>
+        <ul>
+          <li>用 <b>Cloudflare Tunnel</b> 或 <b>Tailscale</b> 让 VPS <b>完全不开放入站端口</b>，源站 IP 不可见；完整步骤见仓库根目录 <code>TUNNEL-GUIDE.md</code>。</li>
+          <li>部署前务必在 <code>.env</code> 设置随机、≥16 位的管理员 Token；重建镜像使 <code>.dockerignore</code> 生效。</li>
+          <li>仅暴露 Nginx 公网端口，Server 端口切勿发布到公网。</li>
+        </ul>
+      </div>
+      <div class="actions"><button class="btn ghost" data-close="securityModal">关闭</button></div>
     </div>
   </div>
 
