@@ -1,5 +1,11 @@
 # Changelog
 
+## README 新增「关于 CF VPS Monitor 的澄清」（源码级证据）（2026-07-09）
+- 两份 README 在「与 Nezha 信任边界对照」之后新增「关于 CF VPS Monitor 的澄清（源码级证据）」小节，基于 `kadidalax/cf-vps-monitor` 的 `agent/main.go` 真实源码逐条反驳两种常见误判：
+  - 误判一「Agent 会被 RCE」：ICMP 路径为 `executeICMPPing` → `resolvePublicIPs`（DNS+黑名单）→ `ips[0].String()` → `exec.Command("ping",...)`，参数恒为 `net.IP.String()` 输出、且 `exec.Command` 走 `execve` 不过 shell，故非 RCE，仅为参数类型受限的命令调用；TCP/HTTP 路径用已校验 `net.IP` 直连 `dialResolvedTCP`，无 DNS rebinding/TOCTOU。
+  - 误判二「加任务签名即可修复服务端沦陷」：在「服务端不可信」威胁模型下，服务端即签名私钥持有者，签名只能防传输途中篡改、防不了服务端自身为攻击者；唯一根治是移除指令通道（即本项目做法）。
+- 明确界定：CF VPS Monitor 在服务端沦陷后是「分布式探测跳板 / 受限受控探测代理」，非 RCE 肉鸡；其探测能力是核心功能、架构内无法消除，只有无指令通道才彻底。
+
 ## README 设计理念文档化增强（2026-07-09）
 - 两份 README 顶部新增「设计原则（5 条）」短清单（信任隔离优先 / 无指令通道 / Agent 零耦合 / 数据最小化 / 服务端不可信+凭据不裸奔），便于快速阅读。
 - 两份 README 威胁模型章节之后新增「与主流监控的信任边界对照（以 Nezha 为例）」表，从受控端入站、通信方向、远程执行、Agent 耦合、采集内容、最坏情况、信任模型 7 个维度横向对比指令通道型监控，说明本项目以「功能减法」换取「安全加法」。
