@@ -1,5 +1,10 @@
 # Changelog
 
+## Agent 上报通道加固（2026-07-09）
+- **受控端客户端强制 HTTPS**：`agent/agent.py` 与 `agent/windows/windows_agent.py` 启动时对 `SERVER_URL` 校验——非 `localhost` 的 `http://` 直接 `exit(1)` 拒绝，避免 Token 明文外发（服务端 `X-Forwarded-Proto` 白名单之外的纵深防御）；`localhost` 的 `http` 仅用于本地测试。
+- **401/403 长退避**：上报收到 `401/403` 时不再立即重试（静态 Agent Token 无法自愈），进入 `AUTH_BACKOFF=600s` 长退避后返回，避免坏 Token 刷日志与对服务端暴力探测；其余瞬时错误（5xx、网络抖动）仍走原有指数退避重试（上限 3 次）。
+- 验证：stub 平台采集模块后实跑，Linux / Windows 两端均通过「拒绝非 localhost http / 放行 https / 放行 localhost http / 401→False / 403→False / 500→重试后 False」共 12 项。
+
 ## P3：管理员两步验证 TOTP（⑧）（2026-07-09）
 
 - **TOTP 第二因素（RFC 6238，零依赖）**（`server/src/totp.js`）：新增 `/api/admin/2fa/{status,setup,enable,disable}`。启用后，所有管理**写操作**（`POST /agents`、`PUT/DELETE /agents/:id`、`reset-token`、`/test-alert`）除静态 Token 外还需动态码——`adminOnly` 守卫在 `is2FAEnabled()` 时要求 `cookie.totp` 或 `X-TOTP` 头，纯静态 Admin Token 单独调用写接口将返回 `401 {need_totp:true}`。

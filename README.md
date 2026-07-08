@@ -76,6 +76,7 @@
 9. **管理接口强制 HTTPS** —— `adminAuth` 校验 `X-Forwarded-Proto`，经反向代理但原始协议非 HTTPS 的请求一律返回 `403`，避免明文传输管理员 Token。注意：仅当 Server 端口不发布到公网、只暴露 Nginx 时才完整生效。
 10. **构建上下文隔离** —— `server/.dockerignore` 已排除 `data/`、`.env`、`node_modules` 等，避免 SQLite 数据库与凭据被打进镜像。
 11. **Dashboard 两步验证（TOTP）** —— 可在「安全」面板启用。启用后，所有**管理写操作**（建/改/删客户端、重置 Token、测试告警）除静态 Token 外还需动态码，纯静态 Admin Token 单独无法执行写操作；前端登录改由签名 `HttpOnly + Secure + SameSite=Strict` Cookie 维持，**不再在前端明文存储 Token**（消除 XSS 窃取风险）。只读拉取（Grafana、`/metrics`、`READONLY_TOKEN`）保持无感、不强制 2FA。详见下文「两步验证（TOTP）」。
+12. **受控端上报通道加固** —— Agent（Linux / Windows）在客户端侧**强制 HTTPS**：`SERVER_URL` 为非 localhost 的 `http://` 直接启动失败，避免 Token 以明文外发（服务端 `X-Forwarded-Proto` 白名单之外的纵深防御）；收到 `401/403` 时进入 **10 分钟长退避且不立即重试**（静态 Token 无法自愈，避免坏 Token 刷日志 / 暴力探测），其余瞬时错误仍走指数退避重试。
 
 ### 两步验证（TOTP）
 
