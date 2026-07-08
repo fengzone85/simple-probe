@@ -1,5 +1,9 @@
 # Changelog
 
+## 遗留项修复：ECharts 实例释放 + SQLite 文件权限收敛（2026-07-09）
+- ECharts 实例未释放（审查观察项）：重写 `ensureChart()`，在每次取用时检测缓存实例是否已脱离文档（详情页 DOM 重写 / 切换 agent 场景），脱离则 `dispose()` 旧实例并在当前 DOM 上重建，修复「图表空白 + 实例泄漏」；`drawLine()` 增加 `ensureChart` 返回 `null` 的保护。
+- SQLite 明文（审查观察项）：`db.js` 打开数据库后将文件权限 `chmod 0o600`（仅属主可读写），按最小权限原则收敛监控数据的暴露面；挂载文件系统不支持 chmod 时静默忽略。
+
 ## 受控端网络质量自测加固：探测目标格式校验（2026-07-09）
 - 落实安全审查 v3 的 4.1 建议：在 `parse_probe_targets()`（Linux `collector.py` / Windows `win_collector.py`）增加基础格式校验——`host` 非空且长度 ≤ 253（域名上限）、`port` 落在 [1,65535]、`label` 超限截断到 24（与服务端 `api.js` 校验一致）。防御 operator 误配（空 host / 超长字符串导致 ping 异常）；因 host 来自本地 `PROBE_TARGETS` 配置、非服务端下发，无注入面。其余审查发现（4.2 线程阻塞、4.3 psutil 依赖、4.4 iputils-ping）均判定为信息级/可接受，未改动。
 

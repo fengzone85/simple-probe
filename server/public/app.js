@@ -232,11 +232,20 @@ async function loadDetail() {
   }
 }
 function ensureChart(id) {
-  if (!charts[id]) charts[id] = echarts.init($(id));
-  return charts[id];
+  const el = $(id);
+  if (!el) return null;
+  const old = charts[id];
+  // 详情页 DOM 被重写（重新打开/切换 agent）后，缓存实例仍绑在已脱离文档的旧元素上，
+  // 须销毁旧实例并在当前元素上重建，否则新图表空白且旧实例持续泄漏。
+  if (old && old.getDom() === el && document.contains(el)) return old;
+  if (old) { try { old.dispose(); } catch (e) {} }
+  const c = echarts.init(el);
+  charts[id] = c;
+  return c;
 }
 function drawLine(id, x, series, unit) {
   const c = ensureChart(id);
+  if (!c) return;
   c.setOption({
     grid: { left: 44, right: 12, top: 18, bottom: 24 },
     tooltip: { trigger: 'axis' },

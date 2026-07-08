@@ -7,6 +7,9 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'monit
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
+// 收紧数据库文件权限：仅属主可读写（默认 umask 常为 644，其他用户可读）。
+// 库内虽无指纹指标，但含全部监控数据，按最小权限原则限制暴露面。
+try { fs.chmodSync(DB_PATH, 0o600); } catch (e) { /* 某些挂载文件系统不支持 chmod，忽略 */ }
 // NOTE: intentionally NOT using WAL mode. WAL requires a -shm shared-memory file
 // which fails on some mounted/network filesystems (SQLITE_IOERR_SHMOPEN).
 // This app is single-writer, so the default rollback-journal mode is sufficient.
