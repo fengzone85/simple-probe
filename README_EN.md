@@ -8,6 +8,18 @@ The agent runs as a **Docker container** on each monitored VPS. It **only makes 
 
 ---
 
+## Design principles (5)
+
+This project trades "doing less" for "being safer". Five non-negotiable design principles:
+
+1. **Trust isolation over feature richness** — neither the server nor any agent is assumed trustworthy; a breach of either must not spread to the other.
+2. **No command channel** — Agent → Server is a one-way data flow; the server has no mechanism to influence agent behavior (no WebSocket downstream, no task push).
+3. **Zero coupling between agents** — each agent knows only its own `SERVER_URL` + token; agents cannot perceive one another.
+4. **Data minimization** — we collect only 6 categories of basic state (online / load / CPU / memory / disk / traffic) and never fingerprint the host (no kernel version, GPU, public IP, or connection count).
+5. **Server untrusted + credentials never naked** — HTTPS throughout, tokens stored as SHA-256 hashes, sessions via signed cookies, dangerous actions gated by TOTP; defense in depth, not single-point trust.
+
+> See "Threat model: trust-boundary analysis" below for the full compromise walkthrough.
+
 ## Project advantages
 
 This project earned a **⭐⭐⭐⭐⭐ (5/5)** rating in two independent security / code reviews, with the verdict "safe for production use". Core strengths:
@@ -151,6 +163,22 @@ In the worst case (server + one agent both compromised), the attacker's ceiling 
 
 1. **Strictly more than "6 items"**: besides the basic state, `hostname` and `os` (distro name, e.g. "Ubuntu 22.04") are also stored. They are lightweight identifiers, **not attack fingerprints** (no kernel version / CVE targeting, no public IP, no GPU), but the "no fingerprint" claim should be read as "no fingerprint useful for targeted attack".
 2. **Token hashing downgrades "plaintext leak" to "forge only with DB write access"**, not complete immunity — this should be explicit when evaluating scenario ③.
+
+## Trust-boundary comparison with mainstream monitors (e.g. Nezha)
+
+Many monitors (e.g. Nezha) prioritize features with an architecture of **monitored hosts exposed to the public internet + bidirectional communication (WebSocket) + remote execution**. More capable, but the trust boundary is broken: once the server is compromised, every monitored host becomes a remotely controllable node.
+
+| Dimension | Simple Probe (this project) | Command-channel monitors (e.g. Nezha) |
+| --- | --- | --- |
+| Agent inbound | Zero inbound (outbound HTTPS only) | Usually exposes ports / dashboard to the internet |
+| Communication | One-way (Agent→Server POST) | Bidirectional (WebSocket, server can push) |
+| Remote execution | ❌ none (deliberately absent) | ✅ present (command exec → RCE risk) |
+| Agent coupling | Zero; mutually unaware | Server can orchestrate; agents can be jump hosts |
+| Collected data | 6 basic metrics, no fingerprint | May include kernel/version/network detail |
+| Worst case (server + 1 agent breached) | Only report spoofing; no machine controlled | Can push tasks to probe / execute via agents |
+| Trust model | Server and agents both untrusted | Implicitly assumes "server is trusted" |
+
+> Bottom line: Simple Probe trades a functional "subtraction" (no command channel, no fingerprinting, no agent awareness) for a security "addition". An attacker cannot exploit what does not exist.
 
 ## Third-party dependencies & privacy
 - **Zero external front-end requests**: ECharts is vendored locally at `server/public/vendor/echarts.min.js`; the dashboard loads no CDN scripts. The server sets a strict `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...` with **no `unsafe-inline`**; all front-end interactions use `addEventListener` event delegation, which closes the XSS path that could steal the admin token.
