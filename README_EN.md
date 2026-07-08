@@ -8,6 +8,27 @@ The agent runs as a **Docker container** on each monitored VPS. It **only makes 
 
 ---
 
+## Project advantages
+
+This project earned a **⭐⭐⭐⭐⭐ (5/5)** rating in two independent security / code reviews, with the verdict "safe for production use". Core strengths:
+
+**🔒 Security-first architecture**
+- **Zero inbound, zero remote-execution on agents**: eliminates the Nezha-class "monitored host exposed + remote exec → RCE" attack surface at the root; monitoring data only enters your own dedicated VPS.
+- **Transport + implementation defense in depth**: HTTPS enforcement via whitelist (only `X-Forwarded-Proto: https` passes, default deny — no spoofed-header bypass), constant-time token comparison (no timing side-channel), and a strict CSP (no `unsafe-inline`, no external scripts).
+
+**🛡️ Layered identity & access control**
+- **Multi-factor auth**: agents report with mutual Token; the server uses an admin token plus an optional read-only token (minimal RBAC basis).
+- **No more naked credentials**: dashboard login uses a signed `HttpOnly + Secure + SameSite=Strict` cookie, so the admin token is no longer stored in plaintext on the front end (kills the XSS-theft risk); optional **TOTP two-factor authentication** requires a code on top of the token for all admin writes, so the static token alone cannot perform dangerous actions.
+
+**🌐 Cross-platform, drop-in**
+- **Linux (Docker, stdlib-only) + Windows (native psutil) agents** report identical fields, so the server receives them with **zero changes**; the Windows agent can be registered as a "start on logon, restart on crash" scheduled task in one command.
+
+**📊 Observability & alerting**
+- Standard **Prometheus `/metrics`** export (Bearer auth) for Grafana; offline / CPU·memory threshold alerts push to **QQ Mail and Telegram** in parallel (one channel failing does not affect the other), with monthly-traffic-quota and expiry-countdown reminders.
+
+**⚡ Lightweight, low-dependency, easy to deploy**
+- Zero-dependency TOTP implementation; ECharts vendored locally (no CDN); agents are stdlib-only and run as non-root; application-layer rate limiting plus Nginx security headers; weak-token startup guard, input validation, and build-context isolation all included.
+
 ## Architecture
 
 ```
