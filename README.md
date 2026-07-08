@@ -25,11 +25,16 @@
 
 ```
 监控/
-  agent/        # 被控端（Docker）
+  agent/        # 被控端（Docker，Linux）
     collector.py   采集 CPU/内存/硬盘/负载/流量（含月度累计）
     agent.py       定时上报 + 失败退避重试
     Dockerfile     python:3.12-slim，纯标准库，非 root 运行
     docker-compose.yml
+  agent/windows/  # 受控端（Windows 原生，基于 psutil；详见该目录 README）
+    win_collector.py  Windows 指标采集（与 Linux 同协议）
+    windows_agent.py  定时上报 + 失败退避重试
+    install.ps1      安装依赖并注册为计划任务（开机自启）
+    run.bat          便捷启动
   server/       # 服务端 + 仪表盘
     server.js / src/{db,auth,api,alerts}.js
     public/     精美仪表盘（ECharts）

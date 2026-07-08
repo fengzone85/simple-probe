@@ -1,5 +1,13 @@
 # Changelog
 
+## P3：Windows 受控端（⑨）（2026-07-09）
+
+- **新增 `agent/windows/`**：与 Linux Docker Agent **协议完全兼容**的 Windows 原生受控端（基于 `psutil`），上报相同字段结构，服务端无需任何改动即可接收。
+- `win_collector.py`：采集 CPU / 内存 / 磁盘 / 网络速率与月累计 / 开机时长；Windows 无 load average，`load1`/`load5`/`load15` 固定占位 `0.0`（仪表盘显示 0，已在文档说明）。
+- `windows_agent.py`：HTTP `Bearer` 上报 + 指数退避重试（逻辑与 Linux `agent.py` 一致）。
+- `install.ps1`：自动 `pip install psutil` 并注册「登录即启动、崩溃自动重启」的计划任务（`HostMonitorAgent-<AgentId>`），实现开机自启；`run.bat` 提供便捷临时启动。
+- 安全：延续主项目原则——受控端零入站、无远程执行接口、全程 `HTTPS + Token` 鉴权；月流量累计持久化到 `state.json`，重启不丢。
+
 ## P3：轻量只读账号（READONLY_TOKEN）（2026-07-09）
 
 - **独立只读 Token**（`server/src/auth.js` + `server/src/api.js` + `.env.example`）：新增可选 `READONLY_TOKEN`，通过 `X-Readonly-Token` 头携带。读接口（`GET /agents`、`/agents/sparklines`、`/agents/:id`、`/agents/:id/metrics`、`/overview`）改由 `adminOrReadonly` 守卫，admin 与 readonly 均可访问；写接口（`POST /agents`、PUT/DELETE `/agents/:id`、`reset-token`、`/test-alert`）改由 `adminOnly` 守卫，readonly 访问返回 `403`、无 Token 返回 `401`。避免给查看者共享全量管理 Token，是 RBAC 的最小可用基础。
