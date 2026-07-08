@@ -288,12 +288,14 @@ function bindEvents() {
 }
 
 async function refresh() {
-  try {
-    await loadOverview();
-    await loadAgents();
+  // overview 与 grid 是独立视图：并发加载、各自独立失败，
+  // 任一接口异常都不影响另一视图的更新（失败时保留已加载的旧内容）。
+  const [ov, ag] = await Promise.allSettled([loadOverview(), loadAgents()]);
+  if (ov.status === 'rejected' && ag.status === 'rejected') {
+    const err = ov.reason;
+    showBanner('数据加载失败：' + (err && err.message ? err.message : err));
+  } else {
     hideBanner();
-  } catch (e) {
-    showBanner('数据加载失败：' + (e && e.message ? e.message : e));
   }
 }
 if (ADMIN_TOKEN) $('tokenInput').value = ADMIN_TOKEN;
