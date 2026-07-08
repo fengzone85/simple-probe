@@ -98,6 +98,60 @@ sqlite3 data/monitor.db "DELETE FROM admin_config;"
 
 (In production, `SESSION_SECRET` should be a fixed random value; otherwise every server restart invalidates all sessions.)
 
+## Threat model: trust-boundary analysis (design philosophy)
+
+> In one sentence: **Trust isolation matters more than feature richness.** This project's security is achieved not by stacking defensive layers, but by *not doing* things — no command channel, no host fingerprinting, no agent-to-agent awareness. An attacker cannot exploit what does not exist.
+
+### Our assumption: the server is untrusted, and so is the agent
+
+Many monitoring systems implicitly assume "the server is trusted". Once the server is compromised, every agent falls with it — because agents accept server commands, execute pushed tasks, and trust everything the server says.
+
+Our design assumes the opposite: **the server may be compromised, a single agent may be compromised, and either breach must not affect the other.** Below we verify this assumption against the code.
+
+### Three pillars (all verified in code)
+
+**① No command channel (Agent → Server is one-way)**
+- The agent only `POST`s to `/api/report`; the response body is used solely for error logging (`e.read()`) and is **never parsed or executed**. The agent listens on no port and has no `subprocess`/`Popen`/`eval`/`exec`.
+- The server's only agent-facing endpoint is `POST /report`; `agentAuth` merely validates the token and stores the metric, returning `{ok:true}`. There is no WebSocket / SSE / any downstream push in the codebase; the dashboard refreshes via browser-side polling, unrelated to agents.
+- This is a **deliberate non-implementation** of a command channel — not "not yet built". Bidirectional WebSocket monitors are the opposite: more capable, but the trust boundary is broken.
+
+**② Zero coupling between agents**
+- Each agent knows only its own `SERVER_URL` + token, and is unaware of other agents.
+- Metrics are stored per `agent_id`; all cross-agent aggregation (`getAgents`/`getMetricsAll`) is admin-only read queries for the dashboard, never pushed to any agent. Even a compromised server has no mechanism to make "agent A contact agent B".
+
+**③ Collected data carries no exploitable information**
+- We collect only 6 categories of basic state: online, load, CPU, memory, disk, traffic (incl. monthly totals).
+- We do **not** collect kernel version, GPU, public IP, or connection count. Even if the server DB is exfiltrated, the leak is only "machine X had CPU/memory Y at time Z" — useless for targeted attacks (no kernel version → no CVE targeting, no public IP → no direct target, no GPU → no mining leverage).
+
+### Three compromise scenarios
+
+| Scenario | Attacker can | This project | Command-channel / fingerprinting monitor |
+| --- | --- | --- | --- |
+| ① Server compromised | Read reported data | ✅ (6 metrics only, no fingerprint) | ✅ (incl. kernel/GPU/public-IP/conns) |
+| | Spoof data to mislead agents | no effect (agents take no commands) | no effect |
+| | Push malicious tasks / probes | ❌ impossible (no command channel) | ✅ can push; agent becomes jump host |
+| | Move laterally to other agents | ❌ impossible | ⚠️ can probe other networks via tasks |
+| ② One agent compromised | Read its own token | ✅ (visible via docker env) | ✅ (visible via ps/cmdline) |
+| | Spoof its own data | ✅ (only affects that agent) | ✅ |
+| | Lateral move / attack server | ❌ impossible (POST-only; server runs no agent command) | ❌ impossible |
+| ③ Server + one agent compromised | Get other agents' tokens | ⚠️ yes (see refinement) | ⚠️ yes |
+| | Spoof other agents' data | ⚠️ yes | ⚠️ yes |
+| | Execute / push tasks on other agents | ❌ impossible (no command channel) | ✅ possible (probe tasks, not RCE) |
+
+### Refinement of scenario ③ (our design is more optimistic)
+
+Tokens are stored in the database as **SHA-256 hashes** (`token_hash`), never in plaintext. Authentication compares `sha256(submitted token)` against the stored hash (constant-time). Therefore:
+
+- A **read-only** DB leak (e.g. exfiltration without write access) yields **no plaintext token** for any agent. To spoof another agent's data, the attacker must either brute-force a 24-byte random token (infeasible) or overwrite `token_hash` with a known value.
+- In other words, a "compromised server" that is read-only **cannot immediately spoof**; DB write access is required. This is a concrete hardening of the ⚠️ row above.
+
+In the worst case (server + one agent both compromised), the attacker's ceiling is **spoofing other agents' reports** — the dashboard shows fake data, but **no machine is controlled**.
+
+### Two honest caveats
+
+1. **Strictly more than "6 items"**: besides the basic state, `hostname` and `os` (distro name, e.g. "Ubuntu 22.04") are also stored. They are lightweight identifiers, **not attack fingerprints** (no kernel version / CVE targeting, no public IP, no GPU), but the "no fingerprint" claim should be read as "no fingerprint useful for targeted attack".
+2. **Token hashing downgrades "plaintext leak" to "forge only with DB write access"**, not complete immunity — this should be explicit when evaluating scenario ③.
+
 ## Third-party dependencies & privacy
 - **Zero external front-end requests**: ECharts is vendored locally at `server/public/vendor/echarts.min.js`; the dashboard loads no CDN scripts. The server sets a strict `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...` with **no `unsafe-inline`**; all front-end interactions use `addEventListener` event delegation, which closes the XSS path that could steal the admin token.
 - **Mail dependency**: alerts use `nodemailer` v9 (QQ Mail SMTP). After a major-version upgrade the transport is validated via `transporter.verify()`; just configure a real `SMTP_PASS` at deploy time.

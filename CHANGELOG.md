@@ -1,5 +1,11 @@
 # Changelog
 
+## 威胁模型：信任边界分析（设计理念）文档化（2026-07-09）
+- 在 `README.md` 与 `README_EN.md` 新增「威胁模型：信任边界分析（设计理念）」章节，向公众说明项目核心设计原则：**信任隔离比功能丰富更重要**，安全靠「不做什么」实现。
+- 三大支柱（均经代码核实）：① 无指令通道（Agent→Server 单向，`/api/report` 仅 POST，响应体只用于日志、无 WebSocket/SSE 下行）；② Agent 之间零耦合（每 Agent 仅知自身 URL+Token，指标按 `agent_id` 分表，无跨 Agent 通信机制）；③ 采集数据不含可利用信息（仅 6 类基础状态，不采内核版本/GPU/公网IP/连接数）。
+- 三种攻破场景对照表（服务端被攻破 / 某 Agent 被攻破 / 服务端+某 Agent 同时被攻破），并细化场景 ③：Token 以 SHA-256 哈希存储（非明文），只读拖库拿不到明文 Token，伪造需 DB 写权限。
+- 诚实标注两个细微点：`hostname`/`os` 仍入库（轻量标识，非攻击指纹）；Token 哈希将「明文泄露」降级为「需 DB 写权限才能伪造」，非完全免疫。
+
 ## Agent 上报通道加固（2026-07-09）
 - **受控端客户端强制 HTTPS**：`agent/agent.py` 与 `agent/windows/windows_agent.py` 启动时对 `SERVER_URL` 校验——非 `localhost` 的 `http://` 直接 `exit(1)` 拒绝，避免 Token 明文外发（服务端 `X-Forwarded-Proto` 白名单之外的纵深防御）；`localhost` 的 `http` 仅用于本地测试。
 - **401/403 长退避**：上报收到 `401/403` 时不再立即重试（静态 Agent Token 无法自愈），进入 `AUTH_BACKOFF=600s` 长退避后返回，避免坏 Token 刷日志与对服务端暴力探测；其余瞬时错误（5xx、网络抖动）仍走原有指数退避重试（上限 3 次）。
