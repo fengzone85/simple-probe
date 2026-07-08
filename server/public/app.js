@@ -79,7 +79,8 @@ function openModal(id) { $(id).classList.add('show'); }
 
 // ---------- sparkline (SVG) ----------
 function sparkline(values, color) {
-  if (!values || values.length === 0) return '';
+  values = (values || []).filter((v) => Number.isFinite(v));
+  if (values.length === 0) return '';
   const w = 100, h = 26, max = Math.max(...values, 1e-9), min = Math.min(...values, 0);
   const range = (max - min) || 1;
   const pts = values.map((v, i) => {
@@ -129,6 +130,8 @@ async function loadAgents() {
     const rxArr = hist[i].map(x => +(x.net_rx_rate / 1024).toFixed(1));
     const txArr = hist[i].map(x => +(x.net_tx_rate / 1024).toFixed(1));
     const loadArr = hist[i].map(x => x.load1);
+    const tempArr = hist[i].map(x => x.temp);
+    const swapArr = hist[i].map(x => x.swap_pct);
     const diskPct = m.disk_pct != null ? m.disk_pct : 0;
     return `<div class="card" data-id="${a.id}">
       <div class="top">
@@ -142,6 +145,8 @@ async function loadAgents() {
         <div class="metric"><div class="lbl"><span>内存</span><span>${fmtPct(m.mem_pct)}</span></div>${sparkline(memArr, '#4f8cff')}</div>
         <div class="metric"><div class="lbl"><span>负载</span><span>${m.load1 != null ? m.load1.toFixed(2) : '—'}</span></div>${sparkline(loadArr, '#ffc24b')}</div>
         <div class="metric"><div class="lbl"><span>流量 ↓/↑</span><span>${(m.net_rx_rate/1024||0).toFixed(0)}/${(m.net_tx_rate/1024||0).toFixed(0)} KB/s</span></div>${sparkline(rxArr, '#3ad07a')}</div>
+        <div class="metric"><div class="lbl"><span>温度</span><span>${m.temp != null ? m.temp.toFixed(1) + '°C' : '—'}</span></div>${sparkline(tempArr, '#ff7a59')}</div>
+        <div class="metric"><div class="lbl"><span>Swap</span><span>${fmtPct(m.swap_pct)}</span></div>${sparkline(swapArr, '#a06bff')}</div>
       </div>
       <div class="metric disk"><div class="lbl"><span>硬盘</span><span>${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span></div>
         <div class="bar"><i data-pct="${diskPct}"></i></div></div>
@@ -180,12 +185,16 @@ async function loadDetail() {
   const rx = rows.map(r => +(r.net_rx_rate / 1024).toFixed(2));
   const tx = rows.map(r => +(r.net_tx_rate / 1024).toFixed(2));
   const disk = rows.map(r => r.disk_pct);
+  const temp = rows.map(r => r.temp);
+  const swap = rows.map(r => r.swap_pct);
 
   drawLine('cCpu', ts, [{ name: 'CPU%', data: cpu }], '%');
   drawLine('cMem', ts, [{ name: '内存%', data: mem }], '%');
   drawLine('cLoad', ts, [{ name: '1m', data: load1 }, { name: '5m', data: load5 }, { name: '15m', data: load15 }], '');
   drawLine('cNet', ts, [{ name: '下行', data: rx }, { name: '上行', data: tx }], 'KB/s');
   drawLine('cDisk', ts, [{ name: '硬盘%', data: disk }], '%');
+  drawLine('cTemp', ts, [{ name: '温度°C', data: temp }], '°C');
+  drawLine('cSwap', ts, [{ name: 'Swap%', data: swap }], '%');
 
   // traffic gauge
   const quota = a ? Number(a.monthly_quota_gb) || 0 : 0;

@@ -15,7 +15,7 @@ This project trades "doing less" for "being safer". Five non-negotiable design p
 1. **Trust isolation over feature richness** — neither the server nor any agent is assumed trustworthy; a breach of either must not spread to the other.
 2. **No command channel** — Agent → Server is a one-way data flow; the server has no mechanism to influence agent behavior (no WebSocket downstream, no task push).
 3. **Zero coupling between agents** — each agent knows only its own `SERVER_URL` + token; agents cannot perceive one another.
-4. **Data minimization** — we collect only 6 categories of basic state (online / load / CPU / memory / disk / traffic) and never fingerprint the host (no kernel version, GPU, public IP, or connection count).
+4. **Data minimization** — we collect only basic state (online / load / CPU / memory / disk / traffic / temperature / Swap / uptime) and never fingerprint the host (no kernel version, GPU, public IP, connection count, or process count).
 5. **Server untrusted + credentials never naked** — HTTPS throughout, tokens stored as SHA-256 hashes, sessions via signed cookies, dangerous actions gated by TOTP; defense in depth, not single-point trust.
 
 > See "Threat model: trust-boundary analysis" below for the full compromise walkthrough.
@@ -132,8 +132,8 @@ Our design assumes the opposite: **the server may be compromised, a single agent
 - Metrics are stored per `agent_id`; all cross-agent aggregation (`getAgents`/`getMetricsAll`) is admin-only read queries for the dashboard, never pushed to any agent. Even a compromised server has no mechanism to make "agent A contact agent B".
 
 **③ Collected data carries no exploitable information**
-- We collect only 6 categories of basic state: online, load, CPU, memory, disk, traffic (incl. monthly totals).
-- We do **not** collect kernel version, GPU, public IP, or connection count. Even if the server DB is exfiltrated, the leak is only "machine X had CPU/memory Y at time Z" — useless for targeted attacks (no kernel version → no CVE targeting, no public IP → no direct target, no GPU → no mining leverage).
+- We collect only basic state: online, load, CPU, memory, disk, traffic (incl. monthly totals), temperature, Swap, uptime. Temperature / Swap / uptime are **non-fingerprint** metrics (no kernel version / CVE targeting, no public IP, no GPU), so even a leak yields nothing actionable.
+- We do **not** collect kernel version, GPU, public IP, connection count, or process count — fingerprints usable for targeted attack. Even if the server DB is exfiltrated, the leak is only "machine X had CPU/memory Y at time Z" — useless for targeted attacks (no kernel version → no CVE targeting, no public IP → no direct target, no GPU → no mining leverage).
 
 ### Three compromise scenarios
 
@@ -161,7 +161,7 @@ In the worst case (server + one agent both compromised), the attacker's ceiling 
 
 ### Two honest caveats
 
-1. **Strictly more than "6 items"**: besides the basic state, `hostname` and `os` (distro name, e.g. "Ubuntu 22.04") are also stored. They are lightweight identifiers, **not attack fingerprints** (no kernel version / CVE targeting, no public IP, no GPU), but the "no fingerprint" claim should be read as "no fingerprint useful for targeted attack".
+1. **On the collected set**: besides the basic state, `hostname`, `os` (distro name, e.g. "Ubuntu 22.04"), temperature, Swap, and uptime are also stored. They are lightweight identifiers or **non-fingerprint metrics** (temperature / Swap / uptime carry no kernel version / CVE targeting, no public IP, no GPU), not attack fingerprints; the "no fingerprint" claim should be read as "no fingerprint useful for targeted attack".
 2. **Token hashing downgrades "plaintext leak" to "forge only with DB write access"**, not complete immunity — this should be explicit when evaluating scenario ③.
 
 ## Trust-boundary comparison with mainstream monitors (e.g. Nezha)
@@ -208,7 +208,7 @@ The core idea of this project is "security through omission." Below are common f
 For an agent to ping or probe a target, the server must push a task to it — which requires a command channel. Once a command channel exists, the trust boundary breaks: a compromised server could make every agent probe arbitrary public targets, turning the fleet into a distributed probe jump host. We keep the Agent → Server flow strictly one-way, so we do not offer "server-orchestrated probing."
 
 ### 2. Host fingerprinting (kernel version / GPU model / public IP / TCP connection count, etc.)
-Such fingerprints, if the server is breached (especially exfiltrated), directly expose each machine's attack surface — an old kernel version enables targeted CVE matching, a public IP gives a direct target, a GPU enables mining trade-offs. We collect only the 6 basic metrics (online / load / CPU / memory / disk / traffic), so even a leak yields nothing actionable for targeted attack.
+Such fingerprints, if the server is breached (especially exfiltrated), directly expose each machine's attack surface — an old kernel version enables targeted CVE matching, a public IP gives a direct target, a GPU enables mining trade-offs. We collect only basic state (incl. non-fingerprint metrics such as temperature / Swap / uptime), so even a leak yields nothing actionable for targeted attack.
 
 ### 3. Server-pushed sampling interval / collection policy
 This is another variant of a command channel (server influencing agent behavior). We fix sampling logic locally on the agent; the server neither pushes nor knows it, preserving the isolation that "a breach of either side cannot affect the other."
@@ -216,7 +216,7 @@ This is another variant of a command channel (server influencing agent behavior)
 ### 4. Using agents as jump hosts to probe third parties
 A natural consequence of the above. With no command channel and no externally controllable command invocation, an agent can never be induced to contact an attacker-chosen target under any circumstance.
 
-> Note: dashboards, metric history charts, node grouping, alerting on the existing metrics, multi-user access with TOTP, etc. are fully provided — they only read the 6 metrics the agent already reports and rely on no downstream command, so they break none of the guarantees above. In one line: we trade the convenience of "letting the server command agents to do work" for the isolation that "a breach of either the server or any agent cannot spread to the other." An attacker cannot exploit what does not exist.
+> Note: dashboards, metric history charts, node grouping, alerting on the existing metrics, multi-user access with TOTP, etc. are fully provided — they only read the basic-state data the agent already reports and rely on no downstream command, so they break none of the guarantees above. In one line: we trade the convenience of "letting the server command agents to do work" for the isolation that "a breach of either the server or any agent cannot spread to the other." An attacker cannot exploit what does not exist.
 
 > Real-time traffic (live up/down rate) is a prime example of such a safe enhancement: the rate is computed locally on the agent from its own two samples (`net_rx_rate`/`net_tx_rate`), shipped through the existing report channel, and displayed by polling the frontend — no command channel added, no fingerprint collected. This project already ships a live rate readout in the agent detail view, refreshing every 3 seconds.
 
@@ -306,7 +306,7 @@ docker compose up -d                 # serves on http://<host>:8080
 
 - Overview: total / online / offline / average CPU·memory.
 - Client cards: status dot, merchant badge, CPU/memory/load/traffic mini sparklines, disk progress bar, **expiry countdown** (<7 days yellow, expired red), notes.
-- Detail page: ECharts time-series for CPU, memory, load, network rate, disk, and this-month traffic (vs quota), over 1h/6h/24h/7d.
+- Detail page: ECharts time-series for CPU, memory, load, network rate, disk, temperature, Swap, and this-month traffic (vs quota), over 1h/6h/24h/7d.
 - Edit / delete clients; auto-refresh every 10s.
 
 ## Alerts

@@ -1,5 +1,11 @@
 # Changelog
 
+## 受控端新增温度 / Swap / 开机时长非指纹指标（2026-07-09）
+- 受控端（Linux `collector.py` / Windows `win_collector.py`）新增本地采集：温度（Linux 读 `/sys/class/thermal/thermal_zone*/temp` 毫摄氏度转 °C 取最高值；Windows 用 `psutil.sensors_temperatures()`）、Swap 使用量/总量/百分比、开机时长（`uptime` 已含）。三者均为**非指纹**指标（无内核版本/CVE 定向、无公网 IP、无 GPU），不触碰任何安全支柱（无指令通道、Agent 零耦合、数据最小化）。
+- 服务端：`metrics` 表在启动时自动迁移新增 `temp` / `swap_used` / `swap_total` / `swap_pct` 四列（兼容已有数据库；列名与类型为硬编码常量，无注入风险）；`/api/report` 校验新增字段，其中 `temp` 允许 `null`（无传感器时）。
+- 前端：详情页新增「温度」「Swap 使用率」两张 ECharts 折线图；客户端卡片新增温度与 Swap 读数（含 sparkline，无传感器时温度显示「—」）；`sparkline` 增加非有限值过滤以容错。
+- 文档同步：中英文 README 将「数据最小化 / 支柱③ / 诚实标注 / 指纹小节 / 仪表盘功能」处的「6 类/6 项」表述更新为「基础状态（含温度/Swap/开机时长等非指纹指标）」，并明确坚决反对的仍是内核/GPU/公网IP/连接数/进程数等指纹。
+
 ## 前端新增「即时流量」实时速率读数（2026-07-09）
 - 详情页新增实时上下行速率读数（每 3 秒用轻量 `/api/agents/:id` 轮询刷新，展示于既有「网络速率」折线图上方）。
 - 速率数据由受控端在本地基于自身两次采样计算（`collector.py` 的 `net_rx_rate`/`net_tx_rate`），经既有 `/api/report` 上报通道入库，前端仅做轮询展示——不新增指令通道、不采集指纹、不改动 Agent，完全落在已有安全边界内。

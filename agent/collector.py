@@ -101,6 +101,41 @@ def uptime_sec():
         return 0.0
 
 
+def swap_info():
+    """Swap usage from /proc/meminfo (bytes). Non-fingerprint metric."""
+    info = {}
+    for line in _read('/proc/meminfo').splitlines():
+        if ':' in line:
+            k, v = line.split(':', 1)
+            info[k.strip()] = int(v.split()[0]) * 1024  # bytes
+    total = info.get('SwapTotal', 0)
+    free = info.get('SwapFree', 0)
+    used = max(0, total - free)
+    pct = (used / total * 100.0) if total else 0.0
+    return used, total, pct
+
+
+def temp_celsius():
+    """Max temperature from /sys/class/thermal (°C). None if no sensor available.
+
+    Read from thermal_zone*/temp which is in millidegrees; divide by 1000.
+    This is a non-fingerprint metric (no kernel/GPU/IP info), safe to report.
+    """
+    temps = []
+    try:
+        base = '/sys/class/thermal'
+        for name in os.listdir(base):
+            if name.startswith('thermal_zone'):
+                try:
+                    v = int(_read(os.path.join(base, name, 'temp')).strip())
+                    temps.append(v / 1000.0)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return round(max(temps), 1) if temps else None
+
+
 class Collector:
     def __init__(self, disk_path='/', state_file='/data/state.json'):
         self.disk_path = disk_path
@@ -135,6 +170,8 @@ class Collector:
         mem_used, mem_total, mem_pct = mem_info()
         disk_used, disk_total, disk_pct = disk_info(self.disk_path)
         l1, l5, l15 = load_avg()
+        swap_used, swap_total, swap_pct = swap_info()
+        temp = temp_celsius()
         rx, tx = net_totals()
         now = time.time()
 
@@ -173,6 +210,10 @@ class Collector:
             'disk_total': disk_total,
             'disk_pct': round(disk_pct, 2),
             'load1': l1, 'load5': l5, 'load15': l15,
+            'temp': temp,
+            'swap_used': swap_used,
+            'swap_total': swap_total,
+            'swap_pct': round(swap_pct, 2),
             'net_rx_rate': rx_rate,
             'net_tx_rate': tx_rate,
             'net_rx_month': st.get('month_rx', 0),

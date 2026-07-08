@@ -131,6 +131,27 @@ class WinCollector:
         except Exception:
             uptime = 0.0
 
+        # Temperature (may be empty on some hosts -> None). Non-fingerprint metric.
+        try:
+            temps = []
+            for _name, entries in psutil.sensors_temperatures().items():
+                for e in entries:
+                    if e.current is not None:
+                        temps.append(e.current)
+            temp = round(max(temps), 1) if temps else None
+        except Exception:
+            temp = None
+
+        # Swap usage. Non-fingerprint metric.
+        try:
+            sm = psutil.swap_memory()
+            swap_used = sm.used
+            swap_total = sm.total
+            swap_pct = sm.percent
+        except Exception:
+            swap_used = swap_total = 0
+            swap_pct = 0.0
+
         return {
             'hostname': socket.gethostname(),
             'os': os_name(),
@@ -144,6 +165,10 @@ class WinCollector:
             'disk_pct': round(disk_pct, 2),
             # Windows has no load average concept — placeholder 0.0.
             'load1': 0.0, 'load5': 0.0, 'load15': 0.0,
+            'temp': temp,
+            'swap_used': swap_used,
+            'swap_total': swap_total,
+            'swap_pct': round(swap_pct, 2),
             'net_rx_rate': rx_rate,
             'net_tx_rate': tx_rate,
             'net_rx_month': st.get('month_rx', 0),

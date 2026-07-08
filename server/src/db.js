@@ -62,6 +62,21 @@ CREATE TABLE IF NOT EXISTS admin_config (
 );
 `);
 
+// ---- schema migration: add temp / swap columns if missing (existing DBs) ----
+// Column names and types below are hardcoded constants (not user input) — no injection risk.
+{
+  const existing = new Set(db.prepare('PRAGMA table_info(metrics)').all().map((r) => r.name));
+  const cols = [
+    ['temp', 'REAL'],
+    ['swap_used', 'INTEGER'],
+    ['swap_total', 'INTEGER'],
+    ['swap_pct', 'REAL'],
+  ];
+  for (const [col, type] of cols) {
+    if (!existing.has(col)) db.exec(`ALTER TABLE metrics ADD COLUMN ${col} ${type};`);
+  }
+}
+
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const genToken = () => crypto.randomBytes(24).toString('hex');
 const genId = () => 'agt_' + crypto.randomBytes(6).toString('hex');
@@ -79,9 +94,11 @@ const stmts = {
   touch: db.prepare('UPDATE agents SET last_seen=?, os=?, hostname=? WHERE id=?'),
   insertMetric: db.prepare(`INSERT INTO metrics
     (agent_id, ts, cpu, mem_used, mem_total, mem_pct, disk_used, disk_total, disk_pct,
-     load1, load5, load15, net_rx_rate, net_tx_rate, net_rx_month, net_tx_month, uptime)
+     load1, load5, load15, net_rx_rate, net_tx_rate, net_rx_month, net_tx_month, uptime,
+     temp, swap_used, swap_total, swap_pct)
     VALUES (@agent_id, @ts, @cpu, @mem_used, @mem_total, @mem_pct, @disk_used, @disk_total, @disk_pct,
-     @load1, @load5, @load15, @net_rx_rate, @net_tx_rate, @net_rx_month, @net_tx_month, @uptime)`),
+     @load1, @load5, @load15, @net_rx_rate, @net_tx_rate, @net_rx_month, @net_tx_month, @uptime,
+     @temp, @swap_used, @swap_total, @swap_pct)`),
   latestMetric: db.prepare('SELECT * FROM metrics WHERE agent_id=? ORDER BY ts DESC LIMIT 1'),
   metricsRange: db.prepare('SELECT * FROM metrics WHERE agent_id=? AND ts>=? ORDER BY ts ASC'),
   prune: db.prepare('DELETE FROM metrics WHERE ts < ?'),

@@ -53,6 +53,11 @@ const validateReport = (b) => {
     net_rx_month: num(b.net_rx_month, 0, 1e18),
     net_tx_month: num(b.net_tx_month, 0, 1e18),
     uptime: num(b.uptime, 0, 1e12),
+    // temp: null means "no sensor" — allowed; otherwise clamp to a plausible range.
+    temp: (b.temp === null || b.temp === undefined) ? null : num(b.temp, -50, 200),
+    swap_used: num(b.swap_used, 0, 1024 * 1024 * 1024 * 1024),
+    swap_total: num(b.swap_total, 0, 1024 * 1024 * 1024 * 1024),
+    swap_pct: num(b.swap_pct, 0, 100),
     os: str(b.os, 200),
     hostname: str(b.hostname, 200)
   };
