@@ -1,0 +1,23 @@
+# 一键部署示例 / Quick-start example
+# 仅启动监控服务端（仪表盘），用于快速测试/演示。
+# Launches only the monitoring server (dashboard) for quick testing / demos.
+#
+# ⚠️ 该示例在明文 :8080 上暴露服务端，管理员 Token 会以明文传输，
+#    请勿用于生产环境。生产请在前端加 Nginx + TLS（见 nginx/monitor.conf.example）。
+# ⚠️ This example exposes the server on plaintext :8080 (token travels unencrypted).
+#    Do NOT use it for production. Put Nginx + TLS in front for production.
+
+services:
+  server:
+    build: ./server
+    container_name: simple-probe-server
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    ports:
+      - "8080:8080"
+    volumes:
+      - server-data:/data
+
+volumes:
+  server-data:

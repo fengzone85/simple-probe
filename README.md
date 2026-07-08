@@ -1,8 +1,10 @@
 # 简单探针 · 自托管 Docker 监控（哪吒替代）
 
-> 项目仓库：https://github.com/fengzone85/simple-probe
+> 项目仓库：https://github.com/fengzone85/simple-probe ｜ [English](README_EN.md)
 
 被控端以 **Docker 容器** 跑在每台受控 VPS 上，**只对外发起 HTTPS 回传**，不在受控端开放任何入站端口、不提供远程执行功能。数据只进入你自己的**独立专用 VPS**，由服务端提供精美仪表盘，并可向 QQ 邮箱推送离线/超阈值告警。
+
+**一键部署（仅服务端，快速测试）**：根目录已提供 `docker-compose.yml`，`cp server/.env.example server/.env` 后 `docker compose up -d` 即可在 `:8080` 启动仪表盘（明文，仅限测试，生产务必加 Nginx + TLS）。
 
 > 设计目标：从根上规避哪吒类漏洞（受控端暴露公网 + 远程执行 RCE）。本方案受控端零入站、零执行接口、全程鉴权 + TLS。
 
