@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('./db');
 const { agentAuth, adminAuth } = require('./auth');
+const alerts = require('./alerts');
 
 // ---- helpers ----
 const num = (v, min, max) => {
@@ -130,6 +131,20 @@ router.put('/agents/:id', adminAuth, (req, res) => {
 router.delete('/agents/:id', adminAuth, (req, res) => {
   db.deleteAgent(req.params.id);
   res.json({ ok: true });
+});
+
+// ---- Admin: send a test alert to verify notify channels (email / Telegram) ----
+router.post('/test-alert', adminAuth, async (req, res) => {
+  const st = alerts.notifyStatus();
+  if (!st.mail && !st.telegram) {
+    return res.status(400).json({ error: '未配置任何通知通道（SMTP 或 TELEGRAM）', status: st });
+  }
+  try {
+    await alerts.sendAlert('[监控] 测试告警', '这是一条测试消息，用于验证通知通道（邮件 / Telegram）是否配置正确。若你收到了，说明配置生效。');
+    res.json({ ok: true, message: '测试告警已发送，请检查邮件 / Telegram。', status: st });
+  } catch (e) {
+    res.status(500).json({ error: e.message, status: st });
+  }
 });
 
 module.exports = router;

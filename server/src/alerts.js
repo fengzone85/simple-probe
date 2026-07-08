@@ -130,10 +130,18 @@ function initTelegram() {
   }
 }
 
-let timer = null;
-function start() {
+function init() {
   initMail();
   initTelegram();
+}
+
+function notifyStatus() {
+  return { mail: !!transporter, telegram: telegramEnabled };
+}
+
+let timer = null;
+function start() {
+  init();
   const interval = Math.max(10000, (Number(process.env.OFFLINE_THRESHOLD_SEC || 60) * 1000) / 2);
   timer = setInterval(check, interval);
   console.log('[alerts] checker started');
@@ -141,4 +149,4 @@ function start() {
 
 function stop() { if (timer) clearInterval(timer); }
 
-module.exports = { start, stop, sendAlert };
+module.exports = { start, stop, sendAlert, init, notifyStatus };
