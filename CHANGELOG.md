@@ -1,5 +1,8 @@
 # Changelog
 
+## README 新增「为什么我们刻意不实现这些功能」（2026-07-09）
+- 两份 README 在「关于其它 agent 类探针的澄清」之后新增「为什么我们刻意不实现这些功能」小节，以「不做的原因」而非「可复制性」视角，逐条说明四类刻意不实现的功能及其安全理由：① 集中式主动探测（需指令通道 → 破坏无指令通道保障，服务端沦陷则成探测跳板）；② 主机指纹采集（内核/GPU/公网IP/连接数 → 拖库即暴露攻击面）；③ 服务端实时下发采样/策略（指令通道变体）；④ 把 Agent 当跳板探测第三方（前三项推论）。并说明仪表盘/历史图表/分组/告警/多用户+TOTP 等纯服务端能力完整提供，因其只读取已上报的 6 项数据、不依赖下行指令。
+
 ## README 新增「关于其它 agent 类探针的澄清」（源码级证据）（2026-07-09）
 - 两份 README 在「与 Nezha 信任边界对照」之后新增「关于其它 agent 类探针的澄清（源码级证据）」小节，基于某开源 agent 类探针项目的 `agent/main.go` 真实源码逐条反驳两种常见误判：
   - 误判一「Agent 会被 RCE」：ICMP 路径为 `executeICMPPing` → `resolvePublicIPs`（DNS+黑名单）→ `ips[0].String()` → `exec.Command("ping",...)`，参数恒为 `net.IP.String()` 输出、且 `exec.Command` 走 `execve` 不过 shell，故非 RCE，仅为参数类型受限的命令调用；TCP/HTTP 路径用已校验 `net.IP` 直连 `dialResolvedTCP`，无 DNS rebinding/TOCTOU。

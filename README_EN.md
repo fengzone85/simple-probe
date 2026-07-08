@@ -200,6 +200,24 @@ This project's threat model assumes the server is untrusted and may be compromis
 
 > In one line: such an agent-type probe is a *constrained controlled probe agent*, not an *RCE backdoor*. Its problem is not RCE — it is the mere existence of a command channel, which this project deliberately avoids.
 
+## Why we deliberately do not implement these features
+
+The core idea of this project is "security through omission." Below are common features in similar monitors that we deliberately leave out, each with its security rationale. Every omission corresponds to one of our trust-boundary guarantees.
+
+### 1. Centralized active probing (ICMP / TCP / HTTP ping of arbitrary targets, assignable to specific nodes)
+For an agent to ping or probe a target, the server must push a task to it — which requires a command channel. Once a command channel exists, the trust boundary breaks: a compromised server could make every agent probe arbitrary public targets, turning the fleet into a distributed probe jump host. We keep the Agent → Server flow strictly one-way, so we do not offer "server-orchestrated probing."
+
+### 2. Host fingerprinting (kernel version / GPU model / public IP / TCP connection count, etc.)
+Such fingerprints, if the server is breached (especially exfiltrated), directly expose each machine's attack surface — an old kernel version enables targeted CVE matching, a public IP gives a direct target, a GPU enables mining trade-offs. We collect only the 6 basic metrics (online / load / CPU / memory / disk / traffic), so even a leak yields nothing actionable for targeted attack.
+
+### 3. Server-pushed sampling interval / collection policy
+This is another variant of a command channel (server influencing agent behavior). We fix sampling logic locally on the agent; the server neither pushes nor knows it, preserving the isolation that "a breach of either side cannot affect the other."
+
+### 4. Using agents as jump hosts to probe third parties
+A natural consequence of the above. With no command channel and no externally controllable command invocation, an agent can never be induced to contact an attacker-chosen target under any circumstance.
+
+> Note: dashboards, metric history charts, node grouping, alerting on the existing metrics, multi-user access with TOTP, etc. are fully provided — they only read the 6 metrics the agent already reports and rely on no downstream command, so they break none of the guarantees above. In one line: we trade the convenience of "letting the server command agents to do work" for the isolation that "a breach of either the server or any agent cannot spread to the other." An attacker cannot exploit what does not exist.
+
 ## Third-party dependencies & privacy
 - **Zero external front-end requests**: ECharts is vendored locally at `server/public/vendor/echarts.min.js`; the dashboard loads no CDN scripts. The server sets a strict `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...` with **no `unsafe-inline`**; all front-end interactions use `addEventListener` event delegation, which closes the XSS path that could steal the admin token.
 - **Mail dependency**: alerts use `nodemailer` v9 (QQ Mail SMTP). After a major-version upgrade the transport is validated via `transporter.verify()`; just configure a real `SMTP_PASS` at deploy time.
