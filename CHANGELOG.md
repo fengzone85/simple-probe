@@ -1,5 +1,8 @@
 # Changelog
 
+## 受控端网络质量自测加固：探测目标格式校验（2026-07-09）
+- 落实安全审查 v3 的 4.1 建议：在 `parse_probe_targets()`（Linux `collector.py` / Windows `win_collector.py`）增加基础格式校验——`host` 非空且长度 ≤ 253（域名上限）、`port` 落在 [1,65535]、`label` 超限截断到 24（与服务端 `api.js` 校验一致）。防御 operator 误配（空 host / 超长字符串导致 ping 异常）；因 host 来自本地 `PROBE_TARGETS` 配置、非服务端下发，无注入面。其余审查发现（4.2 线程阻塞、4.3 psutil 依赖、4.4 iputils-ping）均判定为信息级/可接受，未改动。
+
 ## 受控端网络质量自测（固定公共目标，本地配置，无指令通道）（2026-07-09）
 - 受控端（Linux `collector.py` / Windows `win_collector.py`）新增本地网络质量自测：从本机 ping / TCP 探测**写死在本地配置**的固定公共基础设施（默认联通/电信/移动 DNS + 8.8.8.8）。目标是"集中式主动探测"越界功能的安全等价物——探测目标来自 Agent 本地 `PROBE_TARGETS` 环境变量、服务端永不可下发，故**指令通道不复存在**，三大安全支柱（无指令通道 / Agent 零耦合 / 数据最小化）完全不受影响。
 - 采集逻辑：`probe_one()` 优先 ICMP（系统 `ping -c 1` / Windows `ping -n 1`），解析 RTT（Linux 取 avg、Windows 取平均）；若 `ping` 不可用或被禁，自动回退到目标端口（默认 53）的 TCP 握手测延迟。各目标用 `ThreadPoolExecutor` 并行探测，单次采集额外耗时约 1–2 秒；`parse_probe_targets()` 解析 `label:host[:port]` 格式。

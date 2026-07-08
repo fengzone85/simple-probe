@@ -166,7 +166,14 @@ def parse_probe_targets(spec):
                 port = int(p)
             except Exception:
                 port = 53
-        out.append((label.strip() or host, host, port))
+        # 基础格式校验（防御 operator 误配；host 来自本地配置，非服务端下发，无注入面）。
+        # host 非空且长度 ≤ 253（域名上限）；port 落在 [1,65535]；label 超限截断到 24（与服务端一致）。
+        label = label.strip() or host
+        if not host or len(host) > 253 or not (1 <= int(port) <= 65535):
+            continue
+        if len(label) > 24:
+            label = label[:24]
+        out.append((label, host, port))
     return out
 
 
