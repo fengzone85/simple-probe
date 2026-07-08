@@ -82,7 +82,10 @@ const stmts = {
   prune: db.prepare('DELETE FROM metrics WHERE ts < ?'),
   getAlertState: db.prepare('SELECT * FROM alert_state WHERE agent_id=? AND type=?'),
   setAlertState: db.prepare('INSERT OR REPLACE INTO alert_state (agent_id, type, last_sent) VALUES (?,?,?)'),
-  clearAlertState: db.prepare('DELETE FROM alert_state WHERE agent_id=? AND type=?')
+  clearAlertState: db.prepare('DELETE FROM alert_state WHERE agent_id=? AND type=?'),
+  clearAllAlertState: db.prepare('DELETE FROM alert_state WHERE agent_id=?'),
+  resetToken: db.prepare('UPDATE agents SET token_hash=? WHERE id=?'),
+  metricsRangeAll: db.prepare('SELECT * FROM metrics WHERE ts>=? ORDER BY agent_id, ts ASC')
 };
 
 const createAgent = (fields) => {
@@ -104,6 +107,17 @@ const createAgent = (fields) => {
 const getAgent = (id) => stmts.getAgent.get(id);
 const getAgents = () => stmts.getAgents.all();
 
+// 重置某 Agent 的 Token：生成新 token 并写入哈希，旧 token 立即失效。返回新明文 token。
+const resetAgentToken = (id) => {
+  const a = stmts.getAgent.get(id);
+  if (!a) return null;
+  const token = genToken();
+  stmts.resetToken.run(hashToken(token), id);
+  return token;
+};
+// 批量取所有 Agent 的时序指标（sparkline 用），按 agent_id 升序返回原始行。
+const getMetricsAll = (sinceTs) => stmts.metricsRangeAll.all(sinceTs);
+
 const updateAgent = (id, f) => stmts.updateAgent.run({
   id,
   name: f.name,
@@ -113,7 +127,10 @@ const updateAgent = (id, f) => stmts.updateAgent.run({
   monthly_quota_gb: Number(f.monthly_quota_gb) || 0
 });
 
-const deleteAgent = (id) => stmts.deleteAgent.run(id);
+const deleteAgent = (id) => {
+  stmts.clearAllAlertState.run(id);
+  return stmts.deleteAgent.run(id);
+};
 
 const touchAgent = (id, os, hostname) => stmts.touch.run(Date.now(), os || '', hostname || '', id);
 
@@ -134,7 +151,7 @@ const clearAlertState = (agent_id, type) => stmts.clearAlertState.run(agent_id, 
 
 module.exports = {
   db, hashToken, genToken,
-  createAgent, getAgent, getAgents, updateAgent, deleteAgent,
-  touchAgent, insertMetric, getLatestMetric, getMetrics,
+  createAgent, getAgent, getAgents, updateAgent, deleteAgent, resetAgentToken,
+  touchAgent, insertMetric, getLatestMetric, getMetrics, getMetricsAll,
   prune, getAlertState, setAlertState, clearAlertState
 };

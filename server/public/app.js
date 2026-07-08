@@ -80,10 +80,10 @@ async function loadAgents() {
   const agents = await api('/api/agents');
   const grid = $('grid');
   if (!agents.length) { grid.innerHTML = '<div class="empty">暂无客户端，点击右上角「新建客户端」。</div>'; return; }
-  // fetch sparkline history in parallel
-  const hist = await Promise.all(agents.map(a =>
-    api(`/api/agents/${a.id}/metrics?range=6h`).then(r => r).catch(() => [])
-  ));
+  // 批量获取所有 Agent 的 sparkline 历史（单次请求，避免 N+1 触发 Nginx 限流 429）
+  let histMap = {};
+  try { histMap = await api('/api/agents/sparklines?range=6h'); } catch (e) { histMap = {}; }
+  const hist = agents.map(a => histMap[a.id] || []);
   const html = agents.map((a, i) => {
     const m = a.latest || {};
     const d = daysUntil(a.expire_at);
@@ -239,6 +239,7 @@ async function openEdit(id) {
   $('e_id').value = a.id; $('e_name').value = a.name; $('e_merchant').value = a.merchant || '';
   $('e_expire').value = (a.expire_at || '').slice(0, 10); $('e_quota').value = a.monthly_quota_gb || 0;
   $('e_note').value = a.note || '';
+  $('editResult').innerHTML = '';
   openModal('editModal');
 }
 async function submitEdit() {
@@ -261,6 +262,15 @@ async function submitDelete() {
     closeModal('editModal'); toast('已删除'); refresh();
   } catch (e) { toast('删除失败：' + e.message); }
 }
+async function resetToken() {
+  const id = $('e_id').value;
+  if (!confirm('确认重置该客户端 Token？旧 Token 立即失效，受控端需改用新 Token 后重启。')) return;
+  try {
+    const r = await api(`/api/agents/${id}/reset-token`, { method: 'POST' });
+    $('editResult').innerHTML = `<div class="token-show">新 AGENT_TOKEN: ${r.token}<br><br>请将以上更新到受控端 docker run 的环境变量后重启。</div>`;
+    toast('Token 已重置，请复制新 Token');
+  } catch (e) { toast('重置失败：' + e.message); }
+}
 
 // ---------- refresh loop ----------
 // ---------- event bindings (替代内联 onclick，以适配严格的 CSP) ----------
@@ -272,6 +282,7 @@ function bindEvents() {
   $('btnCreateSubmit').addEventListener('click', submitCreate);
   $('btnEditSubmit').addEventListener('click', submitEdit);
   $('btnDelete').addEventListener('click', submitDelete);
+  $('btnResetToken').addEventListener('click', resetToken);
   $('rangeBar').addEventListener('click', (e) => {
     const b = e.target.closest('[data-r]');
     if (b) setRange(b.getAttribute('data-r'), b);

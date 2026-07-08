@@ -61,6 +61,15 @@ router.get('/agents', adminAuth, (req, res) => {
   res.json(list);
 });
 
+// ---- Admin: batch sparkline history for all agents (avoids N+1 on the frontend) ----
+router.get('/agents/sparklines', adminAuth, (req, res) => {
+  const sec = RANGES[req.query.range] || 21600;
+  const rows = db.getMetricsAll(Date.now() - sec * 1000);
+  const byAgent = {};
+  for (const r of rows) (byAgent[r.agent_id] || (byAgent[r.agent_id] = [])).push(r);
+  res.json(byAgent);
+});
+
 // ---- Admin: single agent info ----
 router.get('/agents/:id', adminAuth, (req, res) => {
   const a = db.getAgent(req.params.id);
@@ -131,6 +140,13 @@ router.put('/agents/:id', adminAuth, (req, res) => {
 router.delete('/agents/:id', adminAuth, (req, res) => {
   db.deleteAgent(req.params.id);
   res.json({ ok: true });
+});
+
+// ---- Admin: reset an agent's token (returns new token; old one invalidated) ----
+router.post('/agents/:id/reset-token', adminAuth, (req, res) => {
+  const token = db.resetAgentToken(req.params.id);
+  if (!token) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true, token });
 });
 
 // ---- Admin: send a test alert to verify notify channels (email / Telegram) ----
