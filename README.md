@@ -124,6 +124,6 @@ docker run -d --name monitor-agent --restart unless-stopped \
 
 ## 告警
 
-- 离线（超过 `OFFLINE_THRESHOLD_SEC` 未上报）、CPU/内存超阈值，通过 QQ 邮箱（`3986232@qq.com`）推送，带冷却去重。
+- 离线（超过 `OFFLINE_THRESHOLD_SEC` 未上报）、CPU/内存超阈值，通过 QQ 邮箱推送，带冷却去重（收件邮箱在 `.env` 的 `ALERT_TO` 中配置）。
 - **数据清理失败告警**：`prune` 连续 3 次失败（如数据库权限/磁盘问题）会推送邮件告警，避免 metrics 表无限膨胀而长期无感知。
 - 需在 `.env` 填入 `SMTP_PASS`（QQ 邮箱「设置→账户→生成授权码」，非登录密码）。

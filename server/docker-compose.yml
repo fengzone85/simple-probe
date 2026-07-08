@@ -19,10 +19,10 @@ services:
       - SMTP_HOST=smtp.qq.com
       - SMTP_PORT=465
       - SMTP_SECURE=true
-      - SMTP_USER=3986232@qq.com
+      - SMTP_USER=你的QQ号@qq.com
       - SMTP_PASS=${SMTP_PASS}
-      - ALERT_FROM=3986232@qq.com
-      - ALERT_TO=3986232@qq.com
+      - ALERT_FROM=你的QQ号@qq.com
+      - ALERT_TO=你的QQ号@qq.com
     volumes:
       - server-data:/data
 

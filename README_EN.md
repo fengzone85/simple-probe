@@ -133,7 +133,7 @@ docker compose up -d                 # serves on http://<host>:8080
 
 ## Alerts
 
-- Offline (no report for longer than `OFFLINE_THRESHOLD_SEC`), CPU/memory over threshold → pushed via QQ Mail (`3986232@qq.com`), with cooldown de-duplication.
+- Offline (no report for longer than `OFFLINE_THRESHOLD_SEC`), CPU/memory over threshold → pushed via QQ Mail, with cooldown de-duplication (recipient configured via `ALERT_TO` in `.env`).
 - **Prune-failure alert**: if `prune` fails 3 times in a row (e.g. DB permission / disk issues), an email alert is sent so the metrics table does not silently grow without bound.
 - Set `SMTP_PASS` in `.env` (QQ Mail: Settings → Account → generate authorization code; not the login password).
 
