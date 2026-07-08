@@ -128,4 +128,4 @@ docker run -d --name monitor-agent --restart unless-stopped \
 - **数据清理失败告警**：`prune` 连续 3 次失败（如数据库权限/磁盘问题）会推送邮件告警，避免 metrics 表无限膨胀而长期无感知。
 - **Telegram 告警（可选）**：在 `.env` 配置 `TELEGRAM_BOT_TOKEN` 与 `TELEGRAM_CHAT_ID` 后，以上告警会**同时**推送到 Telegram（与邮件并行，任一通道失败不影响另一通道）。获取方式见 `.env.example` 注释。
 - 邮箱需在 `.env` 填入 `SMTP_PASS`（QQ 邮箱「设置→账户→生成授权码」，非登录密码）；Telegram 与邮件可只启用其一。
-- **发送测试告警**：配置后可用 `curl -X POST -H 'X-Admin-Token: 你的TOKEN' http://localhost:8080/api/test-alert` 验证（经 Nginx 反代时需带 `-H 'X-Forwarded-Proto: https'`）；或在 `server/` 目录运行 `node scripts/test-notify.js`。
+- **发送测试告警**：配置后可用 `curl -X POST -H 'X-Admin-Token: 你的TOKEN' http://localhost:8080/api/test-alert` 验证（经 Nginx 反代时需带 `-H 'X-Forwarded-Proto: https'`）；或点击仪表盘右上角「📨 测试告警」按钮（需先填写管理员 Token）；也可在 `server/` 目录运行 `node scripts/test-notify.js`。

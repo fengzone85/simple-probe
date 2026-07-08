@@ -137,7 +137,7 @@ docker compose up -d                 # serves on http://<host>:8080
 - **Prune-failure alert**: if `prune` fails 3 times in a row (e.g. DB permission / disk issues), an email alert is sent so the metrics table does not silently grow without bound.
 - **Telegram alerts (optional)**: once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `.env`, the alerts above are **also** delivered to Telegram in parallel with email (each channel fails independently). See `.env.example` for how to obtain them.
 - Provide `SMTP_PASS` in `.env` for mail (QQ Mail: Settings → Account → generate authorization code; not the login password). Telegram and email can be enabled independently.
-- **Send a test alert**: after configuring, verify with `curl -X POST -H 'X-Admin-Token: YOUR_TOKEN' http://localhost:8080/api/test-alert` (add `-H 'X-Forwarded-Proto: https'` when behind an Nginx proxy), or run `node scripts/test-notify.js` from the `server/` directory.
+- **Send a test alert**: after configuring, verify with `curl -X POST -H 'X-Admin-Token: YOUR_TOKEN' http://localhost:8080/api/test-alert` (add `-H 'X-Forwarded-Proto: https'` when behind an Nginx proxy), click the **📨 Test Alert** button on the dashboard top-right (fill in the admin token first), or run `node scripts/test-notify.js` from the `server/` directory.
 
 ## License
 
