@@ -23,11 +23,16 @@ The agent runs as a **Docker container** on each monitored VPS. It **only makes 
 
 ```
 监控/
-  agent/        # Monitored side (Docker)
+  agent/        # Monitored side (Docker, Linux)
     collector.py   collects CPU/memory/disk/load/traffic (incl. monthly totals)
     agent.py       periodic reporting + backoff retry
     Dockerfile     python:3.12-slim, stdlib only, runs as non-root
     docker-compose.yml
+  agent/windows/ # Monitored side (native Windows, psutil; see its README)
+    win_collector.py  Windows metric collection (same protocol as Linux)
+    windows_agent.py  periodic reporting + backoff retry
+    install.ps1       install deps + register startup scheduled task
+    run.bat           convenient launcher
   server/       # Server + dashboard
     server.js / src/{db,auth,api,alerts}.js
     public/     polished dashboard (ECharts)
@@ -47,6 +52,29 @@ The agent runs as a **Docker container** on each monitored VPS. It **only makes 
 8. **Weak-token startup guard** — at startup, if `ADMIN_TOKEN` is empty, equals the default `change-me-admin-token`, or is shorter than 16 chars, the server refuses to start (`process.exit(1)`), forcing the admin to set a strong token early.
 9. **HTTPS enforcement on admin APIs** — `adminAuth` checks `X-Forwarded-Proto`; any request proxied over a non-HTTPS origin is rejected with `403`, preventing plaintext transmission of the admin token. Note: this is fully effective only when the server port is NOT published to the public internet and only Nginx is exposed.
 10. **Build-context isolation** — `server/.dockerignore` excludes `data/`, `.env`, `node_modules`, etc., so the SQLite database and credentials are never baked into the image.
+11. **Dashboard two-factor authentication (TOTP)** — can be enabled in the "Security" panel. Once enabled, all **admin write operations** (create/edit/delete clients, reset token, test alert) additionally require a TOTP code on top of the static token, so the static admin token alone cannot perform dangerous actions. Dashboard login is maintained by a signed `HttpOnly + Secure + SameSite=Strict` cookie, so the admin token is **no longer stored in plaintext on the front end** (eliminating the XSS-theft risk). Read-only pulls (Grafana, `/metrics`, `READONLY_TOKEN`) stay transparent and are not subject to 2FA. See "Two-factor authentication (TOTP)" below.
+
+### Two-factor authentication (TOTP)
+
+To further harden the admin surface, enable TOTP 2FA in the dashboard's "🔒 Security" panel:
+
+1. Open the Security panel and click **Enable two-factor authentication**; the system generates a Base32 secret (shown only once).
+2. Manually enter the secret into any TOTP app (Google Authenticator / 1Password / Authy). This project calls no external QR service, complying with the CSP policy.
+3. Enter the 6-digit code shown by the app and click **Confirm enable**.
+
+After enabling:
+
+- Dashboard login requires **admin token + TOTP code**; the session is kept via a signed cookie (HttpOnly, never stored in plaintext on the front end).
+- All admin write operations require the TOTP code in addition to the token; the static token alone is rejected.
+- Read-only monitoring (Grafana, `/metrics`, read-only token) is unaffected and stays transparent.
+
+**Lost-device recovery**: if you lose your TOTP device, clear the 2FA config in SQLite and re-bind:
+
+```bash
+sqlite3 data/monitor.db "DELETE FROM admin_config;"
+```
+
+(In production, `SESSION_SECRET` should be a fixed random value; otherwise every server restart invalidates all sessions.)
 
 ## Third-party dependencies & privacy
 - **Zero external front-end requests**: ECharts is vendored locally at `server/public/vendor/echarts.min.js`; the dashboard loads no CDN scripts. The server sets a strict `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...` with **no `unsafe-inline`**; all front-end interactions use `addEventListener` event delegation, which closes the XSS path that could steal the admin token.
@@ -126,7 +154,7 @@ docker compose up -d                 # serves on http://<host>:8080
 
 ## Environment variables
 
-**Server `.env`**: `PORT`, `ADMIN_TOKEN`, `OFFLINE_THRESHOLD_SEC` (default 60), `RETENTION_DAYS` (default 30), `ALERT_CPU_PCT`/`ALERT_MEM_PCT` (default 90), `ALERT_COOLDOWN_SEC`, `SMTP_*` (QQ Mail alerts), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (optional, Telegram alerts).
+**Server `.env`**: `PORT`, `ADMIN_TOKEN`, `OFFLINE_THRESHOLD_SEC` (default 60), `RETENTION_DAYS` (default 30), `ALERT_CPU_PCT`/`ALERT_MEM_PCT` (default 90), `ALERT_COOLDOWN_SEC`, `SMTP_*` (QQ Mail alerts), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (optional, Telegram alerts), `READONLY_TOKEN` (optional, read-only account — see below), `SESSION_SECRET`/`SESSION_TTL_MS` (2FA session — see "Two-factor authentication (TOTP)").
 
 **Monitored side**: `SERVER_URL`, `AGENT_ID`, `AGENT_TOKEN`, `INTERVAL` (seconds, default 15), `DISK_PATH` (default `/`).
 
@@ -144,6 +172,54 @@ docker compose up -d                 # serves on http://<host>:8080
 - **Telegram alerts (optional)**: once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `.env`, the alerts above are **also** delivered to Telegram in parallel with email (each channel fails independently). See `.env.example` for how to obtain them.
 - Provide `SMTP_PASS` in `.env` for mail (QQ Mail: Settings → Account → generate authorization code; not the login password). Telegram and email can be enabled independently.
 - **Send a test alert**: after configuring, verify with `curl -X POST -H 'X-Admin-Token: YOUR_TOKEN' http://localhost:8080/api/test-alert` (add `-H 'X-Forwarded-Proto: https'` when behind an Nginx proxy), click the **📨 Test Alert** button on the dashboard top-right (fill in the admin token first), or run `node scripts/test-notify.js` from the `server/` directory.
+
+## Read-only account (READONLY_TOKEN)
+
+To avoid sharing the full-privilege admin token around, configure an optional **read-only** account:
+
+- Set the optional `READONLY_TOKEN` in `.env` (also recommended ≥ 16 chars).
+- Holders may **only call read-only `GET` endpoints** (client list, latest metrics, sparklines, `/metrics`); all write operations (`POST /agents`, `PUT/DELETE /agents/:id`, `reset-token`, `/test-alert`) are blocked by the `adminOnly` guard with `401`.
+- Ideal for read-only consumers like Grafana / third-party dashboards, so the admin token is not exposed to them.
+- The read-only account is **not subject to 2FA** (2FA only constrains admin writes), keeping programmatic read pulls transparent.
+
+## Prometheus metrics export (`/metrics`)
+
+To integrate with Prometheus / Grafana and other observability stacks, the server exposes metrics in standard exposition format:
+
+- `GET /metrics` returns Prometheus text format with unit-suffixed metric names and escaped labels, e.g. `probe_cpu_percent{agent="...",host="..."}`, `probe_mem_percent`, `probe_disk_percent`, `probe_net_rx_bytes_per_sec`, etc.
+- **Auth**: supports `Authorization: Bearer <ADMIN_TOKEN | READONLY_TOKEN>`; requests without a token get `401`.
+- **Trade-off**: this endpoint does **not** enforce HTTPS, to ease in-network Prometheus scraping, protected by the Bearer token; if exposed publicly, always place it behind Nginx + TLS.
+- Example:
+
+```bash
+curl -H 'Authorization: Bearer <your READONLY_TOKEN>' http://localhost:8080/metrics
+```
+
+## Windows monitored side
+
+Besides the Linux Docker agent, this project ships a **native Windows agent** (see the `agent/windows/` directory) for monitoring Windows servers:
+
+- Built on `psutil`, it collects CPU / memory / disk / network rate & monthly totals / uptime, and reports **exactly the same fields as the Linux agent**, so the server receives it with zero changes.
+- Windows has no load average, so `load1/load5/load15` are fixed placeholders `0.0` (the dashboard shows 0, as expected).
+- Install: run `agent/windows/install.ps1` to auto `pip install psutil` and register a "start on logon, restart on crash" scheduled task (auto-start); `run.bat` offers a convenient temporary launcher. See `agent/windows/README.md` for details.
+- Security follows the main project: the agent is outbound-only with no remote-execution interface, using `HTTPS + Token` end to end; monthly traffic totals persist to `state.json` and survive restarts.
+
+## Security review checklist
+
+A security review was performed; all high/medium items are addressed. Summary (✅ done, ⬜ optional left):
+
+| Priority | Item | Status | Notes |
+| --- | --- | --- | --- |
+| P0 | Critical fixes (S1/S2) | ✅ | Fixed in earlier session |
+| P1 | Hardening (S5/C5/C4) | ✅ | Fixed in earlier session |
+| P2 | Hardening (④⑤⑥⑦) | ✅ | Fixed in earlier session |
+| P3 ⑩ | Prometheus `/metrics` | ✅ | `GET /metrics` with Bearer / read-only token auth |
+| P3 ⑪ | Read-only account (RBAC basis) | ✅ | `READONLY_TOKEN`: read-only GET, no writes |
+| P3 ⑨ | Windows agent | ✅ | `agent/windows/` on psutil, protocol-compatible with Linux, zero server changes |
+| P3 ⑧ | Admin TOTP 2FA | ✅ | Signed session-cookie login (no plaintext token on front end) + TOTP on writes |
+| P3 ⑧ | WebAuthn / hardware key | ⬜ | Optional left: TOTP already removes the plaintext-token exposure; WebAuthn adds limited value and needs browser + third-party lib verification |
+
+**Bottom line**: the review's concern — a static admin token lingering in the front end and stealable via XSS — is fully resolved by the **HttpOnly signed-cookie login + TOTP second factor**; cross-platform agents, metric exposure, and the read-only account are all in place.
 
 ## License
 
