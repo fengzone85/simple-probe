@@ -4,6 +4,26 @@ const db = require('./db');
 const { agentAuth, adminAuth } = require('./auth');
 const alerts = require('./alerts');
 
+// 应用层限流（兜底，不依赖 Nginx）：每 IP 每 10s 最多 20 次。
+// /report 已由 Nginx 单独限流，此处放行。trust proxy 已在 server.js 启用，req.ip 为真实客户端。
+const RATE_WINDOW = 10000, RATE_MAX = 20;
+const rateHits = new Map();
+setInterval(() => rateHits.clear(), RATE_WINDOW).unref?.();
+const rateLimit = (req, res, next) => {
+  if (req.path === '/report') return next();
+  const ip = req.ip || req.socket.remoteAddress;
+  const now = Date.now();
+  const rec = rateHits.get(ip);
+  if (!rec || now > rec.reset) {
+    rateHits.set(ip, { reset: now + RATE_WINDOW, count: 1 });
+    return next();
+  }
+  rec.count++;
+  if (rec.count > RATE_MAX) return res.status(429).json({ error: 'too many requests' });
+  next();
+};
+router.use(rateLimit);
+
 // ---- helpers ----
 const num = (v, min, max) => {
   const n = Number(v);

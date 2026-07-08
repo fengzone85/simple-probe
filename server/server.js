@@ -6,6 +6,9 @@ const api = require('./src/api');
 const alerts = require('./src/alerts');
 
 const app = express();
+// 信任前置反代（Nginx）的 X-Forwarded-*，使 req.ip 取到真实客户端 IP，
+// 供应用层限流按客户端区分（而非全部归到 127.0.0.1）。Nginx 已设置 X-Forwarded-For。
+app.set('trust proxy', true);
 
 // 安全响应头：所有资源仅限同源，且禁止任何内联脚本/样式，
 // 从根本上阻断 XSS 窃取 Admin Token 的路径。前端已改为 addEventListener + 事件委托。
