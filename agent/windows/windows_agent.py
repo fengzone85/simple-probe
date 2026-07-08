@@ -15,7 +15,7 @@ from win_collector import WinCollector
 
 # Long backoff on auth rejection (401/403): the agent token is static and cannot
 # self-heal, so hammering the server only aids brute-force and floods logs.
-# Mirrors CF VPS Monitor's "auth failure → 10-min backoff" behavior.
+# Mirrors other agent-type probes' "auth failure → 10-min backoff" behavior.
 AUTH_BACKOFF = 600  # seconds
 
 SERVER_URL = os.environ.get('SERVER_URL', '').rstrip('/')

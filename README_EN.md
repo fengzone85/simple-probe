@@ -180,9 +180,9 @@ Many monitors (e.g. Nezha) prioritize features with an architecture of **monitor
 
 > Bottom line: Simple Probe trades a functional "subtraction" (no command channel, no fingerprinting, no agent awareness) for a security "addition". An attacker cannot exploit what does not exist.
 
-## Clarification on CF VPS Monitor (source-level evidence)
+## Clarification on other agent-type probes (source-level evidence)
 
-CF VPS Monitor (`kadidalax/cf-vps-monitor`), often compared with this project, also uses a server→agent command channel. Two common misconceptions are corrected here with its actual `agent/main.go` source.
+Some other agent-type probes (an open-source project using a server→agent command channel), often compared with this project, also use that pattern. Two common misconceptions are corrected here with its actual `agent/main.go` source.
 
 **Misconception 1: "the agent can be RCE'd" — false.**
 Its ICMP probe path is: `executeICMPPing(target)` → `resolvePublicIPs()` (DNS resolution + blacklist check) → take `ips[0].String()` → only then `exec.Command("ping", "-c", "1", "-W", "2", pingTarget)`. Two facts matter:
@@ -198,7 +198,7 @@ This project's threat model assumes the server is untrusted and may be compromis
 - After a server compromise, the attacker **can** make all agents probe arbitrary public targets via ICMP/TCP/HTTP (restricted by the CIDR blacklist to public addresses only — no intranet reach). It is a **distributed probe jump host**, not an RCE botnet.
 - But the "probe jump host" capability **is not a bug; it is the core feature** (public ping monitoring). It cannot be removed while keeping the feature; only eliminating the command channel (this project's approach) resolves it fully.
 
-> In one line: CF VPS Monitor is a *constrained controlled probe agent*, not an *RCE backdoor*. Its problem is not RCE — it is the mere existence of a command channel, which this project deliberately avoids.
+> In one line: such an agent-type probe is a *constrained controlled probe agent*, not an *RCE backdoor*. Its problem is not RCE — it is the mere existence of a command channel, which this project deliberately avoids.
 
 ## Third-party dependencies & privacy
 - **Zero external front-end requests**: ECharts is vendored locally at `server/public/vendor/echarts.min.js`; the dashboard loads no CDN scripts. The server sets a strict `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...` with **no `unsafe-inline`**; all front-end interactions use `addEventListener` event delegation, which closes the XSS path that could steal the admin token.
