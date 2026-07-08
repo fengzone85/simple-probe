@@ -80,6 +80,12 @@ certbot --nginx -d monitor.yourdomain.com
 > **aaPanel (宝塔) users**: do not hand-write a conf that fights aaPanel. In aaPanel, create a site → reverse proxy pointing the domain to `127.0.0.1:8080`, and use aaPanel's Let's Encrypt one-click for TLS. Put the rate-limit zone (`limit_req_zone`) in "Nginx management → config" (the http block), and only keep `limit_req` in the site config.
 > If Nginx itself is a separate Docker container (not a host process), put server and Nginx on a shared Docker network, reach each other by service name, and remove the `127.0.0.1:` port mapping in `server/docker-compose.yml`.
 
+### Hide the origin IP (optional, recommended)
+
+Even without Cloudflare's CDN/WAF ("CF shield"), the setup above (8080 bound to loopback + Nginx TLS + strong token + CSP) is already secure; however, the VPS public IP is still directly exposed and will be scanned / brute-forced, with no managed WAF.
+
+To **expose no inbound ports at all** and keep the origin IP invisible, see [`TUNNEL-GUIDE.md`](TUNNEL-GUIDE.md): it covers both Cloudflare Tunnel and Tailscale, with full commands and certificate / firewall notes.
+
 ### B. Monitored side (each monitored VPS)
 
 1. Open the dashboard → enter the admin token top-right → click **"+ New client"** → you get an `AGENT_ID` and an `AGENT_TOKEN`.

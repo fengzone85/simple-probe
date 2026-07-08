@@ -82,6 +82,12 @@ certbot --nginx -d monitor.yourdomain.com
 > **宝塔面板用户**：不要手写 conf 与宝塔抢配置。请在宝塔「网站 → 新建站点 → 反向代理」把域名指到 `127.0.0.1:8080`，TLS 用宝塔 Let's Encrypt 一键申请；限流 zone（`limit_req_zone`）放到「Nginx 管理 → 配置」（主配置 http 块），站点内只留 `limit_req`。
 > 若 Nginx 也是独立 Docker 容器（非宿主机进程），请让 server 与 Nginx 共用一个 Docker 网络、用服务名互访，并删掉 `server/docker-compose.yml` 里的 `127.0.0.1:` 端口映射。
 
+### 隐藏源站 IP（可选，强烈推荐）
+
+即便不上 Cloudflare 的 CDN/WAF（"CF 盾"），上述架构（8080 仅绑回环 + Nginx TLS + 强 token + CSP）已足够安全；但 VPS 公网 IP 仍直接暴露，会被扫描 / 爆破直打 Nginx，也无托管 WAF。
+
+若想**彻底不开放任何入站端口**、让源站 IP 不可见，见 [`TUNNEL-GUIDE.md`](TUNNEL-GUIDE.md)：提供 Cloudflare Tunnel 与 Tailscale 两种方案，附完整命令与证书 / 防火墙注意事项。
+
 ### 二、受控端（每台受控 VPS）
 
 1. 打开仪表盘 → 右上角填管理员 Token → 「+ 新建客户端」→ 得到 `AGENT_ID` 和 `AGENT_TOKEN`。
