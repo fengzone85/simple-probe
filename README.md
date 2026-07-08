@@ -78,6 +78,23 @@ sqlite3 data/monitor.db "DELETE FROM admin_config;"
 
 （生产环境 `SESSION_SECRET` 应设为固定随机值，否则服务端重启会使所有登录态失效。）
 
+## 安全审查报告落实清单
+
+对仪表盘做了一次安全审查，高中优项已**全部落地**。下表为对应清单（✅ 已落地，⬜ 可选遗留）：
+
+| 优先级 | 项 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| P0 | 关键修复（S1/S2） | ✅ | 早期会话已修复 |
+| P1 | 加固项（S5/C5/C4） | ✅ | 早期会话已修复 |
+| P2 | 加固项（④⑤⑥⑦） | ✅ | 早期会话已修复 |
+| P3 ⑩ | Prometheus `/metrics` | ✅ | `GET /metrics` 暴露 `cpu/mem/disk/net` 等指标，Bearer 或只读 Token 鉴权 |
+| P3 ⑪ | 轻量只读账号（RBAC 最小基础） | ✅ | `READONLY_TOKEN`：仅只读 GET，不能增删改 |
+| P3 ⑨ | Windows 受控端 | ✅ | `agent/windows/` 基于 psutil，与 Linux Agent **协议完全兼容**，服务端零改动 |
+| P3 ⑧ | 管理员两步验证 TOTP | ✅ | 签名 Session Cookie 登录（前端不再明文存 Token）+ 管理写操作强制 TOTP |
+| P3 ⑧ | WebAuthn / 硬件密钥 | ⬜ | 可选遗留：TOTP 已消除前端静态 Token 暴露面，WebAuthn 增量价值有限，且需浏览器环境与第三方库实机验证，未做 |
+
+**核心结论**：审查报告关注的「静态 Admin Token 长期驻留前端、可被 XSS 窃取」风险，已由 **HttpOnly 签名 Cookie 登录 + TOTP 第二因素** 彻底解决；跨平台受控端、指标暴露、只读账号等扩展能力均已补齐。
+
 ## 第三方依赖与隐私
 - **前端零外链**：ECharts 已本地化到 `server/public/vendor/echarts.min.js`，仪表盘不加载任何 CDN 脚本；服务端设置了严格 `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...`，**不含 `unsafe-inline`**，前端交互全部用 `addEventListener` 事件委托实现，从根本上阻断 XSS 窃取管理员 Token 的路径。
 - **邮件依赖**：告警使用 `nodemailer` v9（QQ 邮箱 SMTP）。升级主版本后已通过 `transporter.verify()` 形态校验；部署时配好真实 `SMTP_PASS` 即可。
