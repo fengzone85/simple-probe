@@ -7,6 +7,7 @@
 - 前端：客户端卡片新增「网络」一行（如 `移动 18ms · 电信 23ms · 联通 ✕`）；详情页新增「网络质量（到探测点延迟 ms）」多系列 ECharts 折线图（动态解析每行的 `probes` 按 label 聚合）；`drawLine` 调色板扩展到 8 色。
 - 部署：Linux Agent `Dockerfile` 增加 `iputils-ping` 安装（其 `/bin/ping` 自带 `cap_net_raw`，monitor 非 root 用户亦可执行 ICMP；无 ping 时自动回退 TCP）。
 - 文档同步：中英文 README 在「环境变量 / 仪表盘功能 / 主动探测小节 / 网络质量自测专节 / 威胁模型表 / 对比表」处新增并统一表述；原"刻意不实现集中式主动探测"小节补充"本地固定目标自测"这一安全等价物的说明。
+- Agent 自述与启动脚本补强：在 `agent/docker-compose.yml`（注释示例）、`agent/windows/run.bat`（默认开启三家 DNS）、`agent/windows/install.ps1`（新增 `-ProbeTargets` 参数并透传进计划任务脚本）与 `agent/windows/README.md`（环境变量表 + 安装示例）补齐 `PROBE_TARGETS` 说明。此前 Windows 启动/计划任务脚本未透传该变量，会导致其在计划任务场景下不生效——本次一并修复。
 
 ## 受控端新增温度 / Swap / 开机时长非指纹指标（2026-07-09）
 - 受控端（Linux `collector.py` / Windows `win_collector.py`）新增本地采集：温度（Linux 读 `/sys/class/thermal/thermal_zone*/temp` 毫摄氏度转 °C 取最高值；Windows 用 `psutil.sensors_temperatures()`）、Swap 使用量/总量/百分比、开机时长（`uptime` 已含）。三者均为**非指纹**指标（无内核版本/CVE 定向、无公网 IP、无 GPU），不触碰任何安全支柱（无指令通道、Agent 零耦合、数据最小化）。

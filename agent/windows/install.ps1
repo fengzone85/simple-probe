@@ -11,6 +11,7 @@
 .PARAMETER AgentToken  在后台「添加 Agent」获得的 Token
 .PARAMETER DiskPath    统计的磁盘盘符，默认 C:\
 .PARAMETER Interval    上报间隔（秒），默认 15
+.PARAMETER ProbeTargets 网络质量自测目标（可选）。格式 label:host[:port]，逗号分隔；不填则用默认三家运营商 DNS + 8.8.8.8，置空则关闭。目标写在本地，服务端不可下发。
 .PARAMETER RegisterTask 开关；指定则创建开机启动任务
 .EXAMPLE
     .\install.ps1 -RegisterTask -ServerUrl https://monitor.example.com -AgentId win-pc-01 -AgentToken xxxx
@@ -21,6 +22,7 @@ param(
     [string]$AgentToken,
     [string]$DiskPath = 'C:\',
     [int]$Interval = 15,
+    [string]$ProbeTargets = '',
     [switch]$RegisterTask
 )
 
@@ -49,6 +51,7 @@ if ($RegisterTask) {
         exit 1
     }
     $bat = Join-Path $ScriptDir 'run_scheduled.bat'
+    $probeLine = if ($ProbeTargets) { "set PROBE_TARGETS=$ProbeTargets" } else { "" }
     @"
 @echo off
 set SERVER_URL=$ServerUrl
@@ -56,6 +59,7 @@ set AGENT_ID=$AgentId
 set AGENT_TOKEN=$AgentToken
 set DISK_PATH=$DiskPath
 set INTERVAL=$Interval
+$probeLine
 python "$ScriptDir\windows_agent.py"
 "@ | Out-File -FilePath $bat -Encoding ascii
 

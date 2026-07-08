@@ -10,6 +10,9 @@ services:
       AGENT_ID: "${AGENT_ID}"
       AGENT_TOKEN: "${AGENT_TOKEN}"
       INTERVAL: "15"
+      # 网络质量自测目标（可选；不填则使用代码默认：移动/电信/联通 DNS + 8.8.8.8）。
+      # 格式 label:host[:port]，逗号分隔。目标写在本地配置中，服务端不可下发。
+      # PROBE_TARGETS: "移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8"
       # 只读挂载宿主机根目录到 /host，DISK_PATH 指向它，才能统计真实根盘使用率
       DISK_PATH: "/host"
     # 只读挂载宿主机根，供读取真实磁盘使用率（agent 仅做 statvfs，不会写入）
