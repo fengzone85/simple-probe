@@ -36,6 +36,11 @@
         <button class="btn ghost sm" data-r="24h">24小时</button>
         <button class="btn ghost sm" data-r="7d">7天</button>
       </div>
+      <div class="live-traffic" id="liveTraffic">
+        <div class="lt"><span class="lt-l">↓ 下行</span><span class="lt-v" id="ltRx">—</span></div>
+        <div class="lt"><span class="lt-l">↑ 上行</span><span class="lt-v" id="ltTx">—</span></div>
+        <div class="lt-hint">实时速率 · 每 3 秒刷新（基于受控端本地已上报数据，不经服务端指令）</div>
+      </div>
       <div class="charts">
         <div class="chart"><h4>CPU 使用率 (%)</h4><div id="cCpu"></div></div>
         <div class="chart"><h4>内存使用率 (%)</h4><div id="cMem"></div></div>

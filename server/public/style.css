@@ -101,6 +101,13 @@ header h1 .dot { color: var(--accent); }
 .chart > div { width: 100%; height: 180px; }
 .range { display: flex; gap: 6px; margin-bottom: 12px; }
 .range .btn.ghost.active { border-color: var(--accent); color: var(--accent); }
+.live-traffic { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; }
+.live-traffic .lt { display: flex; align-items: baseline; gap: 8px; }
+.live-traffic .lt-l { font-size: 12px; color: var(--muted); }
+.live-traffic .lt-v { font-size: 22px; font-weight: 800; }
+.live-traffic .lt:first-child .lt-v { color: var(--green); }
+.live-traffic .lt:nth-child(2) .lt-v { color: var(--accent2); }
+.live-traffic .lt-hint { flex-basis: 100%; font-size: 11px; color: var(--muted); }
 .token-show { background: var(--bg); border: 1px dashed var(--accent); border-radius: 9px; padding: 10px; font-family: monospace; word-break: break-all; color: var(--accent); margin: 8px 0; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--accent); color: var(--text); padding: 11px 18px; border-radius: 10px; z-index: 100; opacity: 0; transition: opacity .2s; box-shadow: var(--shadow); }
 .toast.show { opacity: 1; }

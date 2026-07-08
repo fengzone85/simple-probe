@@ -218,6 +218,8 @@ A natural consequence of the above. With no command channel and no externally co
 
 > Note: dashboards, metric history charts, node grouping, alerting on the existing metrics, multi-user access with TOTP, etc. are fully provided — they only read the 6 metrics the agent already reports and rely on no downstream command, so they break none of the guarantees above. In one line: we trade the convenience of "letting the server command agents to do work" for the isolation that "a breach of either the server or any agent cannot spread to the other." An attacker cannot exploit what does not exist.
 
+> Real-time traffic (live up/down rate) is a prime example of such a safe enhancement: the rate is computed locally on the agent from its own two samples (`net_rx_rate`/`net_tx_rate`), shipped through the existing report channel, and displayed by polling the frontend — no command channel added, no fingerprint collected. This project already ships a live rate readout in the agent detail view, refreshing every 3 seconds.
+
 ## Third-party dependencies & privacy
 - **Zero external front-end requests**: ECharts is vendored locally at `server/public/vendor/echarts.min.js`; the dashboard loads no CDN scripts. The server sets a strict `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...` with **no `unsafe-inline`**; all front-end interactions use `addEventListener` event delegation, which closes the XSS path that could steal the admin token.
 - **Mail dependency**: alerts use `nodemailer` v9 (QQ Mail SMTP). After a major-version upgrade the transport is validated via `transporter.verify()`; just configure a real `SMTP_PASS` at deploy time.

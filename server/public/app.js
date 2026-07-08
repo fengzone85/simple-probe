@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 let totpRequired = false;
 let detailId = null;
 let detailRange = '24h';
+let liveTimer = null;
 const charts = {};
 
 // ---------- helpers ----------
@@ -48,6 +49,7 @@ function fmtBytes(b) {
   return n.toFixed(i ? 1 : 0) + ' ' + u[i];
 }
 function fmtPct(p) { return (p == null ? '—' : Number(p).toFixed(1)) + '%'; }
+function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
 function daysUntil(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + 'T00:00:00');
@@ -165,6 +167,7 @@ async function openDetail(id) {
   const a = await api(`/api/agents/${id}`).catch(() => null);
   if (a) $('detailTitle').textContent = `${a.name} · 详情`;
   await loadDetail();
+  startLiveTraffic(id);
 }
 async function loadDetail() {
   if (!detailId) return;
@@ -299,6 +302,25 @@ async function resetToken() {
   } catch (e) { toast('重置失败：' + e.message); }
 }
 
+// ---------- live traffic (安全增强：仅前端轮询既有 /api/agents/:id，不新增指令通道) ----------
+function updateLiveTraffic(m) {
+  if (!m) return;
+  $('ltRx').textContent = fmtRate(m.net_rx_rate);
+  $('ltTx').textContent = fmtRate(m.net_tx_rate);
+}
+async function startLiveTraffic(id) {
+  stopLiveTraffic();
+  const tick = async () => {
+    const a = await api(`/api/agents/${id}`).catch(() => null);
+    if (a) updateLiveTraffic(a.latest);
+  };
+  await tick();
+  liveTimer = setInterval(tick, 3000);
+}
+function stopLiveTraffic() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+}
+
 // ---------- refresh loop ----------
 // ---------- event bindings (替代内联 onclick，以适配严格的 CSP) ----------
 function bindEvents() {
@@ -324,7 +346,11 @@ function bindEvents() {
   });
   document.addEventListener('click', (e) => {
     const closeEl = e.target.closest('[data-close]');
-    if (closeEl) closeModal(closeEl.getAttribute('data-close'));
+    if (closeEl) {
+      const cid = closeEl.getAttribute('data-close');
+      closeModal(cid);
+      if (cid === 'detailModal') stopLiveTraffic();
+    }
   });
 }
 
