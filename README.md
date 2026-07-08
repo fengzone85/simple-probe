@@ -162,7 +162,7 @@ docker run -d --name monitor-agent --restart unless-stopped \
 
 ## 环境变量
 
-**服务端 `.env`**：`PORT`、`ADMIN_TOKEN`、`OFFLINE_THRESHOLD_SEC`(默认60)、`RETENTION_DAYS`(默认30)、`ALERT_CPU_PCT`/`ALERT_MEM_PCT`(默认90)、`ALERT_COOLDOWN_SEC`、`SMTP_*`(QQ邮箱告警)、`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`(可选，Telegram 告警)。
+**服务端 `.env`**：`PORT`、`ADMIN_TOKEN`、`OFFLINE_THRESHOLD_SEC`(默认60)、`RETENTION_DAYS`(默认30)、`ALERT_CPU_PCT`/`ALERT_MEM_PCT`(默认90)、`ALERT_COOLDOWN_SEC`、`SMTP_*`(QQ邮箱告警)、`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`(可选，Telegram 告警)、`READONLY_TOKEN`(可选，只读账号，见下文)、`SESSION_SECRET`/`SESSION_TTL_MS`(2FA 会话，见「两步验证（TOTP）」)。
 
 **受控端**：`SERVER_URL`、`AGENT_ID`、`AGENT_TOKEN`、`INTERVAL`(秒，默认15)、`DISK_PATH`(默认`/`)。
 
@@ -180,3 +180,34 @@ docker run -d --name monitor-agent --restart unless-stopped \
 - **Telegram 告警（可选）**：在 `.env` 配置 `TELEGRAM_BOT_TOKEN` 与 `TELEGRAM_CHAT_ID` 后，以上告警会**同时**推送到 Telegram（与邮件并行，任一通道失败不影响另一通道）。获取方式见 `.env.example` 注释。
 - 邮箱需在 `.env` 填入 `SMTP_PASS`（QQ 邮箱「设置→账户→生成授权码」，非登录密码）；Telegram 与邮件可只启用其一。
 - **发送测试告警**：配置后可用 `curl -X POST -H 'X-Admin-Token: 你的TOKEN' http://localhost:8080/api/test-alert` 验证（经 Nginx 反代时需带 `-H 'X-Forwarded-Proto: https'`）；或点击仪表盘右上角「📨 测试告警」按钮（需先填写管理员 Token）；也可在 `server/` 目录运行 `node scripts/test-notify.js`。
+
+## 只读账号（READONLY_TOKEN）
+
+为降低「全权限 Admin Token 被到处共享」的风险，可配置一个**仅只读**的账号：
+
+- 在 `.env` 设置可选的 `READONLY_TOKEN`（长度同样建议 ≥ 16）。
+- 持有者**仅能调用只读 `GET` 接口**（查看客户端列表、最新指标、sparkline、`/metrics`），所有写操作（`POST /agents`、`PUT/DELETE /agents/:id`、`reset-token`、`/test-alert`）由 `adminOnly` 守卫拦截，返回 `401`。
+- 适用于 Grafana / 第三方看板等只读消费场景，无需把 Admin Token 暴露给它们。
+- 只读账号**不强制 2FA**（2FA 仅约束 Admin 写操作），保持程序化只读拉取无感。
+
+## Prometheus 指标导出（`/metrics`）
+
+为对接 Prometheus / Grafana 等可观测性栈，服务端暴露标准 exposition 格式指标：
+
+- `GET /metrics` 返回 Prometheus 文本格式，指标名带单位后缀、label 已转义，例如 `probe_cpu_percent{agent="...",host="..."}`、`probe_mem_percent`、`probe_disk_percent`、`probe_net_rx_bytes_per_sec` 等。
+- **鉴权**：支持 `Authorization: Bearer <ADMIN_TOKEN | READONLY_TOKEN>`；未带 Token 返回 `401`。
+- **设计取舍**：该端点**不强制 HTTPS**，便于内网 Prometheus 直接抓取，靠 Bearer Token 保护；如需公网暴露务必置于 Nginx + TLS 之后。
+- 示例：
+
+```bash
+curl -H 'Authorization: Bearer <你的READONLY_TOKEN>' http://localhost:8080/metrics
+```
+
+## Windows 受控端
+
+除 Linux Docker 受控端外，本项目提供 **Windows 原生受控端**（见 `agent/windows/` 目录），用于监控 Windows 服务器：
+
+- 基于 `psutil`，采集 CPU / 内存 / 磁盘 / 网络速率与月累计 / 开机时长，**上报字段与 Linux Agent 完全一致**，服务端零改动即可接收。
+- Windows 无 load average，`load1/load5/load15` 固定占位 `0.0`（仪表盘显示 0，符合预期）。
+- 安装：运行 `agent/windows/install.ps1` 自动 `pip install psutil` 并注册「登录即启动、崩溃自动重启」的计划任务（开机自启）；`run.bat` 提供便捷临时启动。详见 `agent/windows/README.md`。
+- 安全延续主项目原则：受控端零入站、无远程执行接口、全程 `HTTPS + Token` 鉴权；月流量累计持久化到 `state.json`，重启不丢。
