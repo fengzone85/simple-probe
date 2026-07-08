@@ -139,7 +139,7 @@ Our design assumes the opposite: **the server may be compromised, a single agent
 
 | Scenario | Attacker can | This project | Command-channel / fingerprinting monitor |
 | --- | --- | --- | --- |
-| ① Server compromised | Read reported data | ✅ (6 metrics only, no fingerprint) | ✅ (incl. kernel/GPU/public-IP/conns) |
+| ① Server compromised | Read reported data | ✅ (basic state incl. non-fingerprint metrics, no fingerprint) | ✅ (incl. kernel/GPU/public-IP/conns) |
 | | Spoof data to mislead agents | no effect (agents take no commands) | no effect |
 | | Push malicious tasks / probes | ❌ impossible (no command channel) | ✅ can push; agent becomes jump host |
 | | Move laterally to other agents | ❌ impossible | ⚠️ can probe other networks via tasks |
@@ -174,7 +174,7 @@ Many monitors (e.g. Nezha) prioritize features with an architecture of **monitor
 | Communication | One-way (Agent→Server POST) | Bidirectional (WebSocket, server can push) |
 | Remote execution | ❌ none (deliberately absent) | ✅ present (command exec → RCE risk) |
 | Agent coupling | Zero; mutually unaware | Server can orchestrate; agents can be jump hosts |
-| Collected data | 6 basic metrics, no fingerprint | May include kernel/version/network detail |
+| Collected data | Basic state (incl. non-fingerprint metrics like temp/Swap/uptime), no fingerprint | May include kernel/version/network detail |
 | Worst case (server + 1 agent breached) | Only report spoofing; no machine controlled | Can push tasks to probe / execute via agents |
 | Trust model | Server and agents both untrusted | Implicitly assumes "server is trusted" |
 
@@ -207,6 +207,8 @@ The core idea of this project is "security through omission." Below are common f
 ### 1. Centralized active probing (ICMP / TCP / HTTP ping of arbitrary targets, assignable to specific nodes)
 For an agent to ping or probe a target, the server must push a task to it — which requires a command channel. Once a command channel exists, the trust boundary breaks: a compromised server could make every agent probe arbitrary public targets, turning the fleet into a distributed probe jump host. We keep the Agent → Server flow strictly one-way, so we do not offer "server-orchestrated probing."
 
+> **Addendum (2026-07-09): we added a safe equivalent — "agent-side network-quality self-test."** The idea is to replace "server pushes arbitrary probe targets" with "each agent pings / TCP-probes a few *fixed public infrastructures* hardcoded in its local config (default: three carrier DNS + 8.8.8.8) from its own host. Because the probe targets come from the agent's local config and the server **never** pushes any, the command channel does not exist and the trust boundary stays intact. See "Network-quality self-test (fixed public targets)" below. It honors the "don't do" principles: no fingerprint, no new command channel, zero agent coupling.
+
 ### 2. Host fingerprinting (kernel version / GPU model / public IP / TCP connection count, etc.)
 Such fingerprints, if the server is breached (especially exfiltrated), directly expose each machine's attack surface — an old kernel version enables targeted CVE matching, a public IP gives a direct target, a GPU enables mining trade-offs. We collect only basic state (incl. non-fingerprint metrics such as temperature / Swap / uptime), so even a leak yields nothing actionable for targeted attack.
 
@@ -217,6 +219,18 @@ This is another variant of a command channel (server influencing agent behavior)
 A natural consequence of the above. With no command channel and no externally controllable command invocation, an agent can never be induced to contact an attacker-chosen target under any circumstance.
 
 > Note: dashboards, metric history charts, node grouping, alerting on the existing metrics, multi-user access with TOTP, etc. are fully provided — they only read the basic-state data the agent already reports and rely on no downstream command, so they break none of the guarantees above. In one line: we trade the convenience of "letting the server command agents to do work" for the isolation that "a breach of either the server or any agent cannot spread to the other." An attacker cannot exploit what does not exist.
+
+## Network-quality self-test (fixed public targets)
+
+The agent actively pings / TCP-probes **public infrastructures hardcoded in its local config** (default: China Unicom / Telecom / Mobile DNS + 8.8.8.8) from its own host, reporting each target's round-trip latency and reachability to the server. It is the safe equivalent of the "centralized active probing" feature we refuse to implement:
+
+- **Targets are hardcoded locally**: configured via the `PROBE_TARGETS` env var, format `label:host[:port]`, comma-separated; usable by default, empty to disable. The server **never** pushes any probe target to the agent — the fundamental divide from command-channel monitors.
+- **No command channel**: the server cannot order any agent to probe an arbitrary host, so the fleet can never become a distributed probe jump host. The core pillars (no command channel / zero agent coupling / data minimization) are fully preserved.
+- **Only latency and reachability**: each target reports only `ms` (round-trip ms, `null` if unreachable) and `ok` (boolean) — no host fingerprint of any kind.
+- **ICMP first, TCP fallback**: prefers system `ping` (`-c 1`; works as non-root via `iputils-ping`'s `cap_net_raw`); if `ping` is unavailable or blocked, it falls back to a TCP handshake against the target port (default 53) — functional even without privileges. Targets are probed in parallel, adding only ~1–2s to each collection cycle.
+- **Display**: client cards show a "network" line (e.g. `移动 18ms · 电信 23ms · 联通 ✕`); the detail page renders a multi-series ECharts time-series "network quality (latency to probe targets, ms)".
+
+> Note: this capability tests *only* "this host → fixed public IP" network quality. It is entirely different from "letting the server orchestrate agents to probe arbitrary targets," which remains a feature we deliberately do not implement (see "Centralized active probing" above).
 
 > Real-time traffic (live up/down rate) is a prime example of such a safe enhancement: the rate is computed locally on the agent from its own two samples (`net_rx_rate`/`net_tx_rate`), shipped through the existing report channel, and displayed by polling the frontend — no command channel added, no fingerprint collected. This project already ships a live rate readout in the agent detail view, refreshing every 3 seconds.
 
@@ -300,13 +314,13 @@ docker compose up -d                 # serves on http://<host>:8080
 
 **Server `.env`**: `PORT`, `ADMIN_TOKEN`, `OFFLINE_THRESHOLD_SEC` (default 60), `RETENTION_DAYS` (default 30), `ALERT_CPU_PCT`/`ALERT_MEM_PCT` (default 90), `ALERT_COOLDOWN_SEC`, `SMTP_*` (QQ Mail alerts), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (optional, Telegram alerts), `READONLY_TOKEN` (optional, read-only account — see below), `SESSION_SECRET`/`SESSION_TTL_MS` (2FA session — see "Two-factor authentication (TOTP)").
 
-**Monitored side**: `SERVER_URL`, `AGENT_ID`, `AGENT_TOKEN`, `INTERVAL` (seconds, default 15), `DISK_PATH` (default `/`).
+**Monitored side**: `SERVER_URL`, `AGENT_ID`, `AGENT_TOKEN`, `INTERVAL` (seconds, default 15), `DISK_PATH` (default `/`), `PROBE_TARGETS` (network-quality self-test targets; default `移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8`; empty to disable; format `label:host[:port]`, comma-separated).
 
 ## Dashboard features
 
 - Overview: total / online / offline / average CPU·memory.
 - Client cards: status dot, merchant badge, CPU/memory/load/traffic mini sparklines, disk progress bar, **expiry countdown** (<7 days yellow, expired red), notes.
-- Detail page: ECharts time-series for CPU, memory, load, network rate, disk, temperature, Swap, and this-month traffic (vs quota), over 1h/6h/24h/7d.
+- Detail page: ECharts time-series for CPU, memory, load, network rate, disk, temperature, Swap, network quality (latency to fixed public probe targets), and this-month traffic (vs quota), over 1h/6h/24h/7d.
 - Edit / delete clients; auto-refresh every 10s.
 
 ## Alerts

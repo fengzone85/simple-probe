@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Collect system metrics from /proc (Linux). Pure stdlib, no deps."""
 import os
+import re
 import time
 import json
+import shutil
 import socket
 import platform
+import subprocess
+import concurrent.futures
 from datetime import datetime
 
 
@@ -136,10 +140,74 @@ def temp_celsius():
     return round(max(temps), 1) if temps else None
 
 
+def parse_probe_targets(spec):
+    """Parse PROBE_TARGETS env spec: 'label:host[:port],...'. Empty -> [].
+
+    The server NEVER supplies these targets — they are fixed in the agent's
+    local config. So probing is a self-contained reachability test against
+    public infrastructure, NOT a server-pushed scan (no command channel).
+    """
+    out = []
+    if not spec:
+        return out
+    for part in spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if ':' not in part:
+            out.append((part, part, 53))
+            continue
+        label, rest = part.split(':', 1)
+        host = rest
+        port = 53
+        if ':' in rest:
+            host, p = rest.rsplit(':', 1)
+            try:
+                port = int(p)
+            except Exception:
+                port = 53
+        out.append((label.strip() or host, host, port))
+    return out
+
+
+def probe_one(host, port=53, timeout=2):
+    """Measure RTT (ms) to host. Prefer ICMP (system ping); fall back to TCP.
+
+    Returns (ms: float|None, ok: bool). Pure network self-test; only RTT and
+    reachability are collected — no host fingerprint of any kind.
+    """
+    if shutil.which('ping'):
+        if os.name == 'nt':
+            cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
+        else:
+            cmd = ['ping', '-c', '1', '-W', '2', host]
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
+            s = (out.stdout or '') + (out.stderr or '')
+            m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)            # Windows
+            if not m:
+                m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+\s*ms', s)  # Linux avg
+            if m:
+                val = float(m.group(1).replace(',', '.'))
+                return round(val, 1), True
+        except Exception:
+            pass
+    # TCP fallback (no raw socket needed; works in minimal containers)
+    try:
+        import socket as _sock
+        t0 = time.time()
+        with _sock.create_connection((host, port), timeout=timeout):
+            ms = (time.time() - t0) * 1000.0
+        return round(ms, 1), True
+    except Exception:
+        return None, False
+
+
 class Collector:
-    def __init__(self, disk_path='/', state_file='/data/state.json'):
+    def __init__(self, disk_path='/', state_file='/data/state.json', probe_targets=None):
         self.disk_path = disk_path
         self.state_file = state_file
+        self.probe_targets = probe_targets or []
         self._cpu_prev = None
         self._net_prev = None
         self._net_prev_ts = 0
@@ -198,6 +266,16 @@ class Collector:
         st['last_tx'] = tx
         self._save_state()
 
+        # Network self-test (fixed public targets from local config; no server command).
+        probes = {}
+        if self.probe_targets:
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.probe_targets)) as ex:
+                    for label, ms, ok in ex.map(lambda t: (t[0],) + probe_one(t[1], t[2]), self.probe_targets):
+                        probes[label] = {'ms': ms, 'ok': ok}
+            except Exception:
+                probes = {}
+
         return {
             'hostname': socket.gethostname(),
             'os': os_name(),
@@ -217,5 +295,6 @@ class Collector:
             'net_rx_rate': rx_rate,
             'net_tx_rate': tx_rate,
             'net_rx_month': st.get('month_rx', 0),
-            'net_tx_month': st.get('month_tx', 0)
+            'net_tx_month': st.get('month_tx', 0),
+            'probes': probes
         }

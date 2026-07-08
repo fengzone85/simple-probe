@@ -1,5 +1,13 @@
 # Changelog
 
+## 受控端网络质量自测（固定公共目标，本地配置，无指令通道）（2026-07-09）
+- 受控端（Linux `collector.py` / Windows `win_collector.py`）新增本地网络质量自测：从本机 ping / TCP 探测**写死在本地配置**的固定公共基础设施（默认联通/电信/移动 DNS + 8.8.8.8）。目标是"集中式主动探测"越界功能的安全等价物——探测目标来自 Agent 本地 `PROBE_TARGETS` 环境变量、服务端永不可下发，故**指令通道不复存在**，三大安全支柱（无指令通道 / Agent 零耦合 / 数据最小化）完全不受影响。
+- 采集逻辑：`probe_one()` 优先 ICMP（系统 `ping -c 1` / Windows `ping -n 1`），解析 RTT（Linux 取 avg、Windows 取平均）；若 `ping` 不可用或被禁，自动回退到目标端口（默认 53）的 TCP 握手测延迟。各目标用 `ThreadPoolExecutor` 并行探测，单次采集额外耗时约 1–2 秒；`parse_probe_targets()` 解析 `label:host[:port]` 格式。
+- 服务端：`metrics` 表启动时自动迁移新增 `probes TEXT` 列（存 JSON，列名/类型硬编码，无注入风险）；`/api/report` 对 `probes` 做受控校验（对象、键≤8、label≤24 字符、ms∈[0,100000] 或 null、ok 布尔）。
+- 前端：客户端卡片新增「网络」一行（如 `移动 18ms · 电信 23ms · 联通 ✕`）；详情页新增「网络质量（到探测点延迟 ms）」多系列 ECharts 折线图（动态解析每行的 `probes` 按 label 聚合）；`drawLine` 调色板扩展到 8 色。
+- 部署：Linux Agent `Dockerfile` 增加 `iputils-ping` 安装（其 `/bin/ping` 自带 `cap_net_raw`，monitor 非 root 用户亦可执行 ICMP；无 ping 时自动回退 TCP）。
+- 文档同步：中英文 README 在「环境变量 / 仪表盘功能 / 主动探测小节 / 网络质量自测专节 / 威胁模型表 / 对比表」处新增并统一表述；原"刻意不实现集中式主动探测"小节补充"本地固定目标自测"这一安全等价物的说明。
+
 ## 受控端新增温度 / Swap / 开机时长非指纹指标（2026-07-09）
 - 受控端（Linux `collector.py` / Windows `win_collector.py`）新增本地采集：温度（Linux 读 `/sys/class/thermal/thermal_zone*/temp` 毫摄氏度转 °C 取最高值；Windows 用 `psutil.sensors_temperatures()`）、Swap 使用量/总量/百分比、开机时长（`uptime` 已含）。三者均为**非指纹**指标（无内核版本/CVE 定向、无公网 IP、无 GPU），不触碰任何安全支柱（无指令通道、Agent 零耦合、数据最小化）。
 - 服务端：`metrics` 表在启动时自动迁移新增 `temp` / `swap_used` / `swap_total` / `swap_pct` 四列（兼容已有数据库；列名与类型为硬编码常量，无注入风险）；`/api/report` 校验新增字段，其中 `temp` 允许 `null`（无传感器时）。

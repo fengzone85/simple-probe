@@ -11,7 +11,7 @@ import json
 import urllib.request
 import urllib.error
 from urllib.parse import urlparse
-from win_collector import WinCollector
+from win_collector import WinCollector, parse_probe_targets
 
 # Long backoff on auth rejection (401/403): the agent token is static and cannot
 # self-heal, so hammering the server only aids brute-force and floods logs.
@@ -25,6 +25,9 @@ INTERVAL = max(5, int(os.environ.get('INTERVAL', '15')))
 DISK_PATH = os.environ.get('DISK_PATH', 'C:\\')
 DEFAULT_STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'state.json')
 STATE_FILE = os.environ.get('STATE_FILE', DEFAULT_STATE)
+# 网络质量自测目标（固定公共基础设施，写死在本地，服务端不可下发）。
+# 格式：label:host[:port]，逗号分隔。置空则关闭探测。仅测延迟/可达性，不采任何指纹。
+PROBE_TARGETS = os.environ.get('PROBE_TARGETS', '移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8')
 
 if not SERVER_URL or not AGENT_ID or not AGENT_TOKEN:
     print('ERROR: SERVER_URL, AGENT_ID and AGENT_TOKEN must be set', file=sys.stderr)
@@ -42,7 +45,7 @@ if _url.scheme == 'http' and _url.hostname not in ('localhost', '127.0.0.1', '::
     sys.exit(1)
 
 REPORT_URL = SERVER_URL + '/api/report'
-collector = WinCollector(disk_path=DISK_PATH, state_file=STATE_FILE)
+collector = WinCollector(disk_path=DISK_PATH, state_file=STATE_FILE, probe_targets=parse_probe_targets(PROBE_TARGETS))
 
 
 def send(payload, attempt=0):

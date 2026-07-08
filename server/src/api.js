@@ -58,6 +58,24 @@ const validateReport = (b) => {
     swap_used: num(b.swap_used, 0, 1024 * 1024 * 1024 * 1024),
     swap_total: num(b.swap_total, 0, 1024 * 1024 * 1024 * 1024),
     swap_pct: num(b.swap_pct, 0, 100),
+    // 网络质量自测结果（固定公共目标，Agent 本地写死，服务端不可下发）。
+    // 校验为受控对象：键≤8、label≤24 字符，值含 ms(0..100000 或 null) 与 ok(bool)。
+    probes: (() => {
+      const p = b.probes;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return '{}';
+      const out = {};
+      let n = 0;
+      for (const k of Object.keys(p)) {
+        if (n >= 8) break;
+        if (typeof k !== 'string' || k.length > 24) continue;
+        const v = p[k];
+        if (!v || typeof v !== 'object') continue;
+        const ms = (v.ms === null || v.ms === undefined) ? null : num(v.ms, 0, 100000);
+        out[k] = { ms, ok: v.ok === true };
+        n++;
+      }
+      return JSON.stringify(out);
+    })(),
     os: str(b.os, 200),
     hostname: str(b.hostname, 200)
   };

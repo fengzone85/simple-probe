@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS admin_config (
     ['swap_used', 'INTEGER'],
     ['swap_total', 'INTEGER'],
     ['swap_pct', 'REAL'],
+    ['probes', 'TEXT'],
   ];
   for (const [col, type] of cols) {
     if (!existing.has(col)) db.exec(`ALTER TABLE metrics ADD COLUMN ${col} ${type};`);
@@ -95,10 +96,10 @@ const stmts = {
   insertMetric: db.prepare(`INSERT INTO metrics
     (agent_id, ts, cpu, mem_used, mem_total, mem_pct, disk_used, disk_total, disk_pct,
      load1, load5, load15, net_rx_rate, net_tx_rate, net_rx_month, net_tx_month, uptime,
-     temp, swap_used, swap_total, swap_pct)
+     temp, swap_used, swap_total, swap_pct, probes)
     VALUES (@agent_id, @ts, @cpu, @mem_used, @mem_total, @mem_pct, @disk_used, @disk_total, @disk_pct,
      @load1, @load5, @load15, @net_rx_rate, @net_tx_rate, @net_rx_month, @net_tx_month, @uptime,
-     @temp, @swap_used, @swap_total, @swap_pct)`),
+     @temp, @swap_used, @swap_total, @swap_pct, @probes)`),
   latestMetric: db.prepare('SELECT * FROM metrics WHERE agent_id=? ORDER BY ts DESC LIMIT 1'),
   metricsRange: db.prepare('SELECT * FROM metrics WHERE agent_id=? AND ts>=? ORDER BY ts ASC'),
   prune: db.prepare('DELETE FROM metrics WHERE ts < ?'),

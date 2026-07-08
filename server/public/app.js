@@ -49,6 +49,11 @@ function fmtBytes(b) {
   return n.toFixed(i ? 1 : 0) + ' ' + u[i];
 }
 function fmtPct(p) { return (p == null ? '—' : Number(p).toFixed(1)) + '%'; }
+function parseProbes(s) {
+  if (!s) return {};
+  try { const o = JSON.parse(s); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
+  catch (e) { return {}; }
+}
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -132,6 +137,11 @@ async function loadAgents() {
     const loadArr = hist[i].map(x => x.load1);
     const tempArr = hist[i].map(x => x.temp);
     const swapArr = hist[i].map(x => x.swap_pct);
+    const probes = parseProbes(m.probes);
+    const probeLabels = Object.keys(probes);
+    const probeSummary = probeLabels.length
+      ? probeLabels.map(l => `${esc(l)} ${probes[l].ok ? (probes[l].ms != null ? probes[l].ms + 'ms' : '✓') : '✕'}`).join(' · ')
+      : '—';
     const diskPct = m.disk_pct != null ? m.disk_pct : 0;
     return `<div class="card" data-id="${a.id}">
       <div class="top">
@@ -147,6 +157,7 @@ async function loadAgents() {
         <div class="metric"><div class="lbl"><span>流量 ↓/↑</span><span>${(m.net_rx_rate/1024||0).toFixed(0)}/${(m.net_tx_rate/1024||0).toFixed(0)} KB/s</span></div>${sparkline(rxArr, '#3ad07a')}</div>
         <div class="metric"><div class="lbl"><span>温度</span><span>${m.temp != null ? m.temp.toFixed(1) + '°C' : '—'}</span></div>${sparkline(tempArr, '#ff7a59')}</div>
         <div class="metric"><div class="lbl"><span>Swap</span><span>${fmtPct(m.swap_pct)}</span></div>${sparkline(swapArr, '#a06bff')}</div>
+        <div class="metric"><div class="lbl"><span>网络</span><span>${probeSummary}</span></div></div>
       </div>
       <div class="metric disk"><div class="lbl"><span>硬盘</span><span>${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span></div>
         <div class="bar"><i data-pct="${diskPct}"></i></div></div>
@@ -187,6 +198,13 @@ async function loadDetail() {
   const disk = rows.map(r => r.disk_pct);
   const temp = rows.map(r => r.temp);
   const swap = rows.map(r => r.swap_pct);
+  // 网络质量：动态解析每行的 probes，按 label 聚合为多系列折线
+  const probeSet = new Set();
+  rows.forEach(r => { Object.keys(parseProbes(r.probes)).forEach(k => probeSet.add(k)); });
+  const probeSeries = [...probeSet].map(label => ({
+    name: label,
+    data: rows.map(r => { const p = parseProbes(r.probes)[label]; return (p && p.ms != null) ? p.ms : null; })
+  }));
 
   drawLine('cCpu', ts, [{ name: 'CPU%', data: cpu }], '%');
   drawLine('cMem', ts, [{ name: '内存%', data: mem }], '%');
@@ -195,6 +213,7 @@ async function loadDetail() {
   drawLine('cDisk', ts, [{ name: '硬盘%', data: disk }], '%');
   drawLine('cTemp', ts, [{ name: '温度°C', data: temp }], '°C');
   drawLine('cSwap', ts, [{ name: 'Swap%', data: swap }], '%');
+  drawLine('cProbe', ts, probeSeries, 'ms');
 
   // traffic gauge
   const quota = a ? Number(a.monthly_quota_gb) || 0 : 0;
@@ -227,7 +246,7 @@ function drawLine(id, x, series, unit) {
     series: series.map((s, i) => ({
       name: s.name, type: 'line', smooth: true, showSymbol: false, data: s.data,
       areaStyle: i === 0 ? { opacity: 0.12 } : undefined,
-      lineStyle: { width: 2 }, itemStyle: { color: ['#36d1c4', '#4f8cff', '#ffc24b'][i % 3] }
+      lineStyle: { width: 2 }, itemStyle: { color: ['#36d1c4', '#4f8cff', '#ffc24b', '#3ad07a', '#ff7a59', '#a06bff', '#f25f5c', '#e0c34a'][i % 8] }
     }))
   }, true);
 }
