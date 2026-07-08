@@ -23,6 +23,8 @@ services:
       - SMTP_PASS=${SMTP_PASS}
       - ALERT_FROM=你的QQ号@qq.com
       - ALERT_TO=你的QQ号@qq.com
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - server-data:/data
 

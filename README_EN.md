@@ -2,7 +2,7 @@
 
 > Repository: https://github.com/fengzone85/simple-probe
 
-The agent runs as a **Docker container** on each monitored VPS. It **only makes outbound HTTPS reports** — no inbound ports are opened on the monitored host, and no remote-execution capability exists. Data flows only into **your own dedicated VPS**, where the server renders a polished dashboard and can push offline / threshold-exceeded alerts to a QQ Mail inbox.
+The agent runs as a **Docker container** on each monitored VPS. It **only makes outbound HTTPS reports** — no inbound ports are opened on the monitored host, and no remote-execution capability exists. Data flows only into **your own dedicated VPS**, where the server renders a polished dashboard and can push offline / threshold-exceeded alerts to a QQ Mail inbox or Telegram.
 
 > Design goal: eliminate the class of vulnerabilities that plague Nezha (monitored hosts exposed to the public internet + remote execution → RCE). This design gives agents zero inbound surface, zero execution interfaces, and enforces auth + TLS end to end.
 
@@ -120,7 +120,7 @@ docker compose up -d                 # serves on http://<host>:8080
 
 ## Environment variables
 
-**Server `.env`**: `PORT`, `ADMIN_TOKEN`, `OFFLINE_THRESHOLD_SEC` (default 60), `RETENTION_DAYS` (default 30), `ALERT_CPU_PCT`/`ALERT_MEM_PCT` (default 90), `ALERT_COOLDOWN_SEC`, `SMTP_*` (QQ Mail alerts).
+**Server `.env`**: `PORT`, `ADMIN_TOKEN`, `OFFLINE_THRESHOLD_SEC` (default 60), `RETENTION_DAYS` (default 30), `ALERT_CPU_PCT`/`ALERT_MEM_PCT` (default 90), `ALERT_COOLDOWN_SEC`, `SMTP_*` (QQ Mail alerts), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (optional, Telegram alerts).
 
 **Monitored side**: `SERVER_URL`, `AGENT_ID`, `AGENT_TOKEN`, `INTERVAL` (seconds, default 15), `DISK_PATH` (default `/`).
 
@@ -135,7 +135,8 @@ docker compose up -d                 # serves on http://<host>:8080
 
 - Offline (no report for longer than `OFFLINE_THRESHOLD_SEC`), CPU/memory over threshold → pushed via QQ Mail, with cooldown de-duplication (recipient configured via `ALERT_TO` in `.env`).
 - **Prune-failure alert**: if `prune` fails 3 times in a row (e.g. DB permission / disk issues), an email alert is sent so the metrics table does not silently grow without bound.
-- Set `SMTP_PASS` in `.env` (QQ Mail: Settings → Account → generate authorization code; not the login password).
+- **Telegram alerts (optional)**: once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `.env`, the alerts above are **also** delivered to Telegram in parallel with email (each channel fails independently). See `.env.example` for how to obtain them.
+- Provide `SMTP_PASS` in `.env` for mail (QQ Mail: Settings → Account → generate authorization code; not the login password). Telegram and email can be enabled independently.
 
 ## License
 
