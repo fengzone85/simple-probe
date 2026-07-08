@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('./src/db');
 const api = require('./src/api');
 const alerts = require('./src/alerts');
+const { safeEqual } = require('./src/auth');
 
 const app = express();
 // 信任前置反代（Nginx）的 X-Forwarded-*，使 req.ip 取到真实客户端 IP，
@@ -29,6 +30,60 @@ if (!ADMIN_TOKEN || ADMIN_TOKEN === 'change-me-admin-token' || ADMIN_TOKEN.lengt
 }
 
 app.use(express.json({ limit: '16kb' }));
+
+// ---- Prometheus /metrics 导出（P3：可观测性）----
+// 通过 Bearer Token 鉴权（复用 ADMIN_TOKEN，恒定时间比较），不强制 https，便于内网抓取。
+// 例：curl -H "Authorization: Bearer $ADMIN_TOKEN" http://host:8080/metrics
+function promEscape(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+const METRIC_DEFS = [
+  { name: 'monitor_agent_cpu_percent',       desc: 'CPU 使用率（百分比）',           get: m => m && m.cpu },
+  { name: 'monitor_agent_mem_used_bytes',    desc: '内存已用（字节）',               get: m => m && m.mem_used },
+  { name: 'monitor_agent_mem_total_bytes',   desc: '内存总量（字节）',               get: m => m && m.mem_total },
+  { name: 'monitor_agent_mem_percent',       desc: '内存使用率（百分比）',           get: m => m && m.mem_pct },
+  { name: 'monitor_agent_disk_used_bytes',   desc: '磁盘已用（字节）',               get: m => m && m.disk_used },
+  { name: 'monitor_agent_disk_total_bytes',  desc: '磁盘总量（字节）',               get: m => m && m.disk_total },
+  { name: 'monitor_agent_disk_percent',      desc: '磁盘使用率（百分比）',           get: m => m && m.disk_pct },
+  { name: 'monitor_agent_load1',             desc: '系统负载 1 分钟',                get: m => m && m.load1 },
+  { name: 'monitor_agent_load5',             desc: '系统负载 5 分钟',                get: m => m && m.load5 },
+  { name: 'monitor_agent_load15',            desc: '系统负载 15 分钟',               get: m => m && m.load15 },
+  { name: 'monitor_agent_net_rx_rate_bytes', desc: '网络接收速率（字节/秒）',         get: m => m && m.net_rx_rate },
+  { name: 'monitor_agent_net_tx_rate_bytes', desc: '网络发送速率（字节/秒）',         get: m => m && m.net_tx_rate },
+  { name: 'monitor_agent_net_rx_total_bytes',desc: '当月累计接收（字节）',            get: m => m && m.net_rx_month },
+  { name: 'monitor_agent_net_tx_total_bytes',desc: '当月累计发送（字节）',            get: m => m && m.net_tx_month },
+  { name: 'monitor_agent_uptime_seconds',    desc: '系统运行时长（秒）',             get: m => m && m.uptime },
+  { name: 'monitor_agent_last_seen_seconds', desc: '最近一次上报的 Unix 时间戳（秒）', get: m => m ? Math.floor((m.ts || 0) / 1000) : null },
+];
+app.get('/metrics', (req, res) => {
+  const auth = req.header('Authorization') || '';
+  const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!t || !safeEqual(t, process.env.ADMIN_TOKEN)) {
+    return res.status(401).set('Content-Type', 'text/plain').send('401 Unauthorized');
+  }
+  const agents = db.getAgents();
+  const now = Date.now();
+  const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
+  const lines = [];
+  lines.push('# HELP monitor_up Agent 是否在线（最近上报在阈值内为 1）');
+  lines.push('# TYPE monitor_up gauge');
+  for (const a of agents) {
+    const up = (now - (a.last_seen || 0)) <= offlineSec * 1000 ? 1 : 0;
+    lines.push(`monitor_up{agent="${promEscape(a.id)}",name="${promEscape(a.name)}"} ${up}`);
+  }
+  for (const def of METRIC_DEFS) {
+    lines.push(`# HELP ${def.name} ${def.desc}`);
+    lines.push(`# TYPE ${def.name} gauge`);
+    for (const a of agents) {
+      const m = db.getLatestMetric(a.id);
+      const v = def.get(m);
+      if (v === null || v === undefined) continue;
+      lines.push(`${def.name}{agent="${promEscape(a.id)}",name="${promEscape(a.name)}"} ${v}`);
+    }
+  }
+  res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8').send(lines.join('\n') + '\n');
+});
+
 app.use('/api', api);
 app.use(express.static(path.join(__dirname, 'public')));
 

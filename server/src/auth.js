@@ -35,4 +35,4 @@ function adminAuth(req, res, next) {
   next();
 }
 
-module.exports = { agentAuth, adminAuth };
+module.exports = { agentAuth, adminAuth, safeEqual };
