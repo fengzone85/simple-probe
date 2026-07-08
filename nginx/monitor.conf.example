@@ -12,11 +12,20 @@
 #       并把下面这行 limit_req_zone 放进「Nginx 管理 → 配置」（主配置 http 块），站点内只留 limit_req。
 
 # === http 级别：限流 zone（必须在这里，不在 server {} 内）===
+# report：受控端高频上报，宽松一点（1r/s，突发 5）
 limit_req_zone $binary_remote_addr zone=report:10m rate=1r/s;
+# apilimit：后台管理 / 读取类接口，严格一些（2r/s，突发 10），用于挡 admin token 爆破与高频重放
+limit_req_zone $binary_remote_addr zone=apilimit:10m rate=2r/s;
 
 server {
     listen 80;
     server_name monitor.yourdomain.com;
+
+    # 安全响应头（certbot --nginx 生成 443 server 块时会继承这些 location，
+    # 因此 HSTS 在 HTTPS 下自动生效；HTTP 下浏览器会忽略 HSTS，无害）
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
 
     # ACME 校验 + 反代核心
     location = /api/report {
@@ -29,12 +38,16 @@ server {
         client_max_body_size 16k;
     }
 
+    # 其余所有请求（含 /api/overview、/api/test-alert 等后台接口）
+    # 统一限流，挡 admin token 爆破与高频重放；仪表盘每 ~10s 轮询远低于此阈值，不受影响。
     location / {
+        limit_req zone=apilimit burst=10 nodelay;
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 16k;
     }
 }
 
