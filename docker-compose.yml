@@ -14,6 +14,9 @@ services:
     restart: unless-stopped
     env_file:
       - ./server/.env
+    # 快速测试为明文 http，需显式放行（生产经 Nginx+TLS 无需此变量）。
+    environment:
+      - ADMIN_ALLOW_HTTP=1
     ports:
       - "8080:8080"
     volumes:
