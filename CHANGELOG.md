@@ -1,5 +1,10 @@
 # Changelog
 
+## P3：轻量只读账号（READONLY_TOKEN）（2026-07-09）
+
+- **独立只读 Token**（`server/src/auth.js` + `server/src/api.js` + `.env.example`）：新增可选 `READONLY_TOKEN`，通过 `X-Readonly-Token` 头携带。读接口（`GET /agents`、`/agents/sparklines`、`/agents/:id`、`/agents/:id/metrics`、`/overview`）改由 `adminOrReadonly` 守卫，admin 与 readonly 均可访问；写接口（`POST /agents`、PUT/DELETE `/agents/:id`、`reset-token`、`/test-alert`）改由 `adminOnly` 守卫，readonly 访问返回 `403`、无 Token 返回 `401`。避免给查看者共享全量管理 Token，是 RBAC 的最小可用基础。
+- admin/readonly 均走恒定时间比较与 `X-Forwarded-Proto` 白名单（https 强制）；`req.role` 透传供后续扩展。
+
 ## P3：Prometheus /metrics 导出（2026-07-09）
 
 - **`GET /metrics`（Prometheus 文本格式）**（`server/server.js`）：导出每个 Agent 的最新 CPU / 内存 / 磁盘 / 负载 / 网络速率与累计量 / 运行时长，以及 `monitor_up`（复用 `OFFLINE_THRESHOLD_SEC` 判定在线）。便于直接喂给 Grafana + Prometheus 做仪表盘与告警，无需轮询 JSON API。

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./db');
-const { agentAuth, adminAuth } = require('./auth');
+const { agentAuth, adminOrReadonly, adminOnly } = require('./auth');
 const alerts = require('./alerts');
 
 // 应用层限流（兜底，不依赖 Nginx）：每 IP 每 10s 最多 20 次。
@@ -70,7 +70,7 @@ router.post('/report', agentAuth, (req, res) => {
 });
 
 // ---- Admin: list agents + latest metric + online status ----
-router.get('/agents', adminAuth, (req, res) => {
+router.get('/agents', adminOrReadonly, (req, res) => {
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
   const now = Date.now();
   const list = db.getAgents().map((a) => {
@@ -82,7 +82,7 @@ router.get('/agents', adminAuth, (req, res) => {
 });
 
 // ---- Admin: batch sparkline history for all agents (avoids N+1 on the frontend) ----
-router.get('/agents/sparklines', adminAuth, (req, res) => {
+router.get('/agents/sparklines', adminOrReadonly, (req, res) => {
   const sec = RANGES[req.query.range] || 21600;
   const rows = db.getMetricsAll(Date.now() - sec * 1000);
   const byAgent = {};
@@ -91,7 +91,7 @@ router.get('/agents/sparklines', adminAuth, (req, res) => {
 });
 
 // ---- Admin: single agent info ----
-router.get('/agents/:id', adminAuth, (req, res) => {
+router.get('/agents/:id', adminOrReadonly, (req, res) => {
   const a = db.getAgent(req.params.id);
   if (!a) return res.status(404).json({ error: 'not found' });
   const latest = db.getLatestMetric(a.id);
@@ -102,14 +102,14 @@ router.get('/agents/:id', adminAuth, (req, res) => {
 
 // ---- Admin: metrics time-series ----
 const RANGES = { '1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800 };
-router.get('/agents/:id/metrics', adminAuth, (req, res) => {
+router.get('/agents/:id/metrics', adminOrReadonly, (req, res) => {
   const sec = RANGES[req.query.range] || 3600;
   const rows = db.getMetrics(req.params.id, Date.now() - sec * 1000);
   res.json(rows);
 });
 
 // ---- Admin: overview ----
-router.get('/overview', adminAuth, (req, res) => {
+router.get('/overview', adminOrReadonly, (req, res) => {
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
   const now = Date.now();
   const agents = db.getAgents();
@@ -131,7 +131,7 @@ router.get('/overview', adminAuth, (req, res) => {
 });
 
 // ---- Admin: create agent ----
-router.post('/agents', adminAuth, (req, res) => {
+router.post('/agents', adminOnly, (req, res) => {
   const { id, token } = db.createAgent({
     name: str(req.body.name, 100) || undefined,
     merchant: str(req.body.merchant, 100),
@@ -143,7 +143,7 @@ router.post('/agents', adminAuth, (req, res) => {
 });
 
 // ---- Admin: update agent metadata ----
-router.put('/agents/:id', adminAuth, (req, res) => {
+router.put('/agents/:id', adminOnly, (req, res) => {
   const a = db.getAgent(req.params.id);
   if (!a) return res.status(404).json({ error: 'not found' });
   db.updateAgent(req.params.id, {
@@ -157,20 +157,20 @@ router.put('/agents/:id', adminAuth, (req, res) => {
 });
 
 // ---- Admin: delete agent ----
-router.delete('/agents/:id', adminAuth, (req, res) => {
+router.delete('/agents/:id', adminOnly, (req, res) => {
   db.deleteAgent(req.params.id);
   res.json({ ok: true });
 });
 
 // ---- Admin: reset an agent's token (returns new token; old one invalidated) ----
-router.post('/agents/:id/reset-token', adminAuth, (req, res) => {
+router.post('/agents/:id/reset-token', adminOnly, (req, res) => {
   const token = db.resetAgentToken(req.params.id);
   if (!token) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true, token });
 });
 
 // ---- Admin: send a test alert to verify notify channels (email / Telegram) ----
-router.post('/test-alert', adminAuth, async (req, res) => {
+router.post('/test-alert', adminOnly, async (req, res) => {
   const st = alerts.notifyStatus();
   if (!st.mail && !st.telegram) {
     return res.status(400).json({ error: '未配置任何通知通道（SMTP 或 TELEGRAM）', status: st });

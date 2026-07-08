@@ -21,18 +21,53 @@ function agentAuth(req, res, next) {
   next();
 }
 
-function adminAuth(req, res, next) {
-  const t = req.header('X-Admin-Token');
-  if (!t || !safeEqual(t, process.env.ADMIN_TOKEN)) return res.status(401).json({ error: 'unauthorized' });
-  // 白名单：仅允许经反向代理且原始请求为 HTTPS 时携带 Admin Token。
-  // 直连 :8080（无 X-Forwarded-Proto 头、或伪造为 http）一律拒绝，
-  // 杜绝伪造该头绕过、以及误暴露 8080 端口的情况。
-  // 本地开发/快速测试如需直连 http，可显式设置 ADMIN_ALLOW_HTTP=1（生产切勿设置）。
+// 协议白名单：仅允许经反向代理且原始请求为 HTTPS 时携带管理类 Token。
+// 直连 :8080（无 X-Forwarded-Proto 头、或伪造为 http）一律拒绝，
+// 杜绝伪造该头绕过、以及误暴露 8080 端口的情况。
+// 本地开发/快速测试如需直连 http，可显式设置 ADMIN_ALLOW_HTTP=1（生产切勿设置）。
+function requireProto(req, res) {
   const proto = (req.header('X-Forwarded-Proto') || '').toLowerCase();
   if (proto !== 'https' && process.env.ADMIN_ALLOW_HTTP !== '1') {
-    return res.status(403).json({ error: 'https required' });
+    res.status(403).json({ error: 'https required' });
+    return false;
   }
+  return true;
+}
+
+// 解析请求角色：admin（X-Admin-Token）或 readonly（X-Readonly-Token，可选）。
+// 两者均使用恒定时间比较，避免时序侧信道。未设置 READONLY_TOKEN 时无只读账号。
+function resolveRole(req) {
+  const at = req.header('X-Admin-Token');
+  if (at && safeEqual(at, process.env.ADMIN_TOKEN)) return 'admin';
+  const rt = req.header('X-Readonly-Token');
+  const roTok = process.env.READONLY_TOKEN;
+  if (rt && roTok && safeEqual(rt, roTok)) return 'readonly';
+  return null;
+}
+
+function adminAuth(req, res, next) {
+  if (resolveRole(req) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!requireProto(req, res)) return;
   next();
 }
 
-module.exports = { agentAuth, adminAuth, safeEqual };
+// 读接口：admin 或 readonly 均可访问（查看数据）。
+function adminOrReadonly(req, res, next) {
+  const role = resolveRole(req);
+  if (!role) return res.status(401).json({ error: 'unauthorized' });
+  if (!requireProto(req, res)) return;
+  req.role = role;
+  next();
+}
+
+// 写接口：仅 admin 可访问；携带 readonly Token 返回 403，无 Token 返回 401。
+function adminOnly(req, res, next) {
+  const role = resolveRole(req);
+  if (!role) return res.status(401).json({ error: 'unauthorized' });
+  if (role !== 'admin') return res.status(403).json({ error: 'admin required' });
+  if (!requireProto(req, res)) return;
+  req.role = role;
+  next();
+}
+
+module.exports = { agentAuth, adminAuth, adminOrReadonly, adminOnly, safeEqual };
