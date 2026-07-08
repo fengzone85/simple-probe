@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS alert_state (
   last_sent  INTEGER NOT NULL,
   PRIMARY KEY(agent_id, type)
 );
+
+CREATE TABLE IF NOT EXISTS admin_config (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
 `);
 
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
@@ -149,9 +154,22 @@ const getAlertState = (agent_id, type) => stmts.getAlertState.get(agent_id, type
 const setAlertState = (agent_id, type, ts) => stmts.setAlertState.run(agent_id, type, ts);
 const clearAlertState = (agent_id, type) => stmts.clearAlertState.run(agent_id, type);
 
+// ---- Admin 2FA (TOTP) 配置（单管理员模型，key-value）----
+const _getCfg = db.prepare('SELECT value FROM admin_config WHERE key = ?');
+const _setCfg = db.prepare('INSERT OR REPLACE INTO admin_config (key, value) VALUES (?, ?)');
+const TWOFA_SECRET = 'admin_2fa_secret';
+const TWOFA_ENABLED = 'admin_2fa_enabled';
+const getConfig = (k) => { const r = _getCfg.get(k); return r ? r.value : null; };
+const setConfig = (k, v) => _setCfg.run(k, String(v));
+const get2FASecret = () => getConfig(TWOFA_SECRET);
+const is2FAEnabled = () => getConfig(TWOFA_ENABLED) === '1';
+const set2FASecret = (s) => setConfig(TWOFA_SECRET, s);
+const set2FAEnabled = (b) => setConfig(TWOFA_ENABLED, b ? '1' : '0');
+
 module.exports = {
   db, hashToken, genToken,
   createAgent, getAgent, getAgents, updateAgent, deleteAgent, resetAgentToken,
   touchAgent, insertMetric, getLatestMetric, getMetrics, getMetricsAll,
-  prune, getAlertState, setAlertState, clearAlertState
+  prune, getAlertState, setAlertState, clearAlertState,
+  getConfig, setConfig, get2FASecret, is2FAEnabled, set2FASecret, set2FAEnabled
 };

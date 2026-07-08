@@ -1,17 +1,38 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
+let totpRequired = false;
 let detailId = null;
 let detailRange = '24h';
 const charts = {};
 
 // ---------- helpers ----------
-function saveToken() {
-  ADMIN_TOKEN = $('tokenInput').value.trim();
-  localStorage.setItem('admin_token', ADMIN_TOKEN);
-  toast('Token 已保存');
-  refresh();
+async function doLogin() {
+  const token = $('tokenInput').value.trim();
+  const totp = $('totpInput').value.trim();
+  if (!token) { toast('请输入管理员 Token'); return; }
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, totp })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status !== 200) { toast(j.error || '登录失败'); return; }
+    totpRequired = !!j.totp;
+    $('totpInput').value = '';
+    $('btnLogout').style.display = '';
+    await refresh();
+  } catch (e) { toast('登录失败：' + (e.message || e)); }
+}
+async function doLogout() {
+  try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) {}
+  location.reload();
+}
+function showLogin(need) {
+  if (need) { totpRequired = true; $('totpInput').style.display = ''; }
+  showBanner('请先登录：输入管理员 Token' + (totpRequired ? ' 与动态码' : ''));
+  $('tokenInput').focus();
 }
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -34,9 +55,16 @@ function daysUntil(dateStr) {
   return Math.ceil((d - new Date()) / 86400000);
 }
 async function api(url, opts = {}) {
-  const headers = Object.assign({ 'X-Admin-Token': ADMIN_TOKEN }, opts.headers || {});
-  const res = await fetch(url, Object.assign({}, opts, { headers }));
-  if (res.status === 401) { toast('未授权：请先填写管理员 Token'); throw new Error('unauthorized'); }
+  // 凭证由浏览器自动随 Cookie 发送（same-origin），不再在前端持有明文 Token。
+  const headers = Object.assign({}, opts.headers || {});
+  const res = await fetch(url, Object.assign({}, opts, { headers, credentials: 'same-origin' }));
+  if (res.status === 401) {
+    let need = false;
+    try { const j = await res.json(); need = !!(j && j.need_totp); } catch (e) {}
+    showLogin(need);
+    toast('未授权：请先登录' + (need ? '（需要动态码）' : ''));
+    throw new Error('unauthorized');
+  }
   if (!res.ok) {
     let msg = 'HTTP ' + res.status;
     try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (e) {}
@@ -200,7 +228,6 @@ function setRange(r, el) {
 
 // ---------- test alert ----------
 async function sendTestAlert() {
-  if (!ADMIN_TOKEN) { toast('请先在右上角填写管理员 Token'); return; }
   const btn = $('btnTestAlert');
   const old = btn.textContent;
   btn.disabled = true; btn.textContent = '发送中…';
@@ -275,9 +302,11 @@ async function resetToken() {
 // ---------- refresh loop ----------
 // ---------- event bindings (替代内联 onclick，以适配严格的 CSP) ----------
 function bindEvents() {
-  $('btnSave').addEventListener('click', saveToken);
+  $('btnLogin').addEventListener('click', doLogin);
+  $('btnLogout').addEventListener('click', doLogout);
   $('btnTestAlert').addEventListener('click', sendTestAlert);
-  $('btnSecurity').addEventListener('click', () => openModal('securityModal'));
+  $('btnSecurity').addEventListener('click', async () => { await load2FAStatus(); openModal('securityModal'); });
+  $('tfaToggle').addEventListener('click', start2FASetup);
   $('btnNew').addEventListener('click', openCreate);
   $('btnCreateSubmit').addEventListener('click', submitCreate);
   $('btnEditSubmit').addEventListener('click', submitEdit);
@@ -310,8 +339,64 @@ async function refresh() {
     hideBanner();
   }
 }
-if (ADMIN_TOKEN) $('tokenInput').value = ADMIN_TOKEN;
 bindEvents();
-refresh();
+load2FAStatus();
+initLoad();
+
+async function initLoad() {
+  try {
+    const st = await fetch('/api/admin/2fa/status', { credentials: 'same-origin' }).then(r => r.json());
+    totpRequired = !!st.enabled;
+    $('totpInput').style.display = totpRequired ? '' : 'none';
+  } catch (e) {}
+  refresh();
+}
 setInterval(() => { if (detailId && $('detailModal').classList.contains('show')) loadDetail(); else refresh(); }, 10000);
 window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));
+
+// ---------- 2FA (TOTP) ----------
+async function load2FAStatus() {
+  try {
+    const st = await api('/api/admin/2fa/status');
+    totpRequired = !!st.enabled;
+    $('tfaStatus').textContent = st.enabled ? '状态：已启用' : '状态：未启用';
+    $('tfaToggle').textContent = st.enabled ? '禁用两步验证' : '启用两步验证';
+    $('tfaSetup').style.display = 'none';
+  } catch (e) { $('tfaStatus').textContent = '加载失败'; }
+}
+function start2FASetup() {
+  $('tfaCode').value = '';
+  $('tfaSetup').style.display = '';
+  if (totpRequired) {
+    $('tfaSecret').textContent = '请输入 Authenticator 中的动态码以禁用两步验证：';
+    $('tfaEnable').textContent = '确认禁用';
+    $('tfaEnable').onclick = disable2FA;
+  } else {
+    $('tfaSecret').textContent = '正在生成密钥…';
+    api('/api/admin/2fa/setup').then(r => {
+      $('tfaSecret').textContent = '密钥（手动输入到 Authenticator 应用）：\n' + r.secret + '\n\n' + r.otpauth_uri;
+    }).catch(e => toast('设置失败：' + e.message));
+    $('tfaEnable').textContent = '确认启用';
+    $('tfaEnable').onclick = enable2FA;
+  }
+}
+async function enable2FA() {
+  const code = $('tfaCode').value.trim();
+  if (!code) { toast('请输入动态码'); return; }
+  try {
+    await api('/api/admin/2fa/enable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+    toast('两步验证已启用');
+    await load2FAStatus();
+    refresh();
+  } catch (e) { toast('启用失败：' + e.message); }
+}
+async function disable2FA() {
+  const code = $('tfaCode').value.trim();
+  if (!code) { toast('请输入动态码以禁用'); return; }
+  try {
+    await api('/api/admin/2fa/disable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+    toast('两步验证已禁用');
+    await load2FAStatus();
+    refresh();
+  } catch (e) { toast('禁用失败：' + e.message); }
+}

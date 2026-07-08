@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./db');
-const { agentAuth, adminOrReadonly, adminOnly } = require('./auth');
+const { agentAuth, adminOrReadonly, adminOnly, requireAdmin, safeEqual, setSessionCookie, clearSessionCookie, SESSION_TTL } = require('./auth');
+const totp = require('./totp');
 const alerts = require('./alerts');
 
 // 应用层限流（兜底，不依赖 Nginx）：每 IP 每 10s 最多 20 次。
@@ -181,6 +182,61 @@ router.post('/test-alert', adminOnly, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message, status: st });
   }
+});
+
+// ---- Admin 登录（签发签名 Session Cookie；若启用 2FA 需 TOTP）----
+// 登录后前端不再持有明文 Admin Token，凭证以 HttpOnly+Secure Cookie 维持，降低 XSS 窃取风险。
+router.post('/login', async (req, res) => {
+  const { token, totp: code } = req.body || {};
+  if (!token || !safeEqual(token, process.env.ADMIN_TOKEN)) {
+    return res.status(401).json({ error: 'invalid token' });
+  }
+  const need = db.is2FAEnabled();
+  if (need) {
+    const secret = db.get2FASecret();
+    if (!code || !secret || !totp.verifyTOTP(secret, code)) {
+      return res.status(401).json({ error: 'invalid totp', need_totp: true });
+    }
+  }
+  const payload = { role: 'admin', totp: need, exp: Date.now() + SESSION_TTL };
+  setSessionCookie(res, payload);
+  res.json({ ok: true, totp: need });
+});
+
+router.post('/logout', (req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+// ---- Admin 2FA (TOTP) 管理 ----
+router.get('/admin/2fa/status', adminOrReadonly, (req, res) => {
+  res.json({ enabled: db.is2FAEnabled() });
+});
+
+// 生成密钥（尚未启用）。仅 admin 可调用；返回明文密钥仅此一次，供手动录入 Authenticator。
+router.post('/admin/2fa/setup', requireAdmin, (req, res) => {
+  if (db.is2FAEnabled()) return res.status(400).json({ error: '2fa already enabled' });
+  const secret = totp.generateSecret();
+  db.set2FASecret(secret);
+  res.json({ secret, otpauth_uri: totp.otpauthUri(secret), enabled: false });
+});
+
+router.post('/admin/2fa/enable', requireAdmin, (req, res) => {
+  const { code } = req.body || {};
+  const secret = db.get2FASecret();
+  if (!secret) return res.status(400).json({ error: 'run setup first' });
+  if (!code || !totp.verifyTOTP(secret, code)) return res.status(400).json({ error: 'invalid code' });
+  db.set2FAEnabled(true);
+  res.json({ ok: true, enabled: true });
+});
+
+router.post('/admin/2fa/disable', requireAdmin, (req, res) => {
+  const { code } = req.body || {};
+  if (!db.is2FAEnabled()) return res.status(400).json({ error: '2fa not enabled' });
+  const secret = db.get2FASecret();
+  if (!code || !secret || !totp.verifyTOTP(secret, code)) return res.status(400).json({ error: 'invalid code' });
+  db.set2FAEnabled(false);
+  res.json({ ok: true, enabled: false });
 });
 
 module.exports = router;

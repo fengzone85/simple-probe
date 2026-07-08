@@ -54,6 +54,29 @@
 8. **弱口令启动拦截** —— 服务端启动时若 `ADMIN_TOKEN` 为空、等于默认值 `change-me-admin-token` 或长度 < 16，直接拒绝启动（`process.exit(1)`），迫使管理员尽早设置强 Token。
 9. **管理接口强制 HTTPS** —— `adminAuth` 校验 `X-Forwarded-Proto`，经反向代理但原始协议非 HTTPS 的请求一律返回 `403`，避免明文传输管理员 Token。注意：仅当 Server 端口不发布到公网、只暴露 Nginx 时才完整生效。
 10. **构建上下文隔离** —— `server/.dockerignore` 已排除 `data/`、`.env`、`node_modules` 等，避免 SQLite 数据库与凭据被打进镜像。
+11. **Dashboard 两步验证（TOTP）** —— 可在「安全」面板启用。启用后，所有**管理写操作**（建/改/删客户端、重置 Token、测试告警）除静态 Token 外还需动态码，纯静态 Admin Token 单独无法执行写操作；前端登录改由签名 `HttpOnly + Secure + SameSite=Strict` Cookie 维持，**不再在前端明文存储 Token**（消除 XSS 窃取风险）。只读拉取（Grafana、`/metrics`、`READONLY_TOKEN`）保持无感、不强制 2FA。详见下文「两步验证（TOTP）」。
+
+### 两步验证（TOTP）
+
+为进一步提升管理端安全，可在仪表盘「🔒 安全」面板中启用 TOTP 两步验证：
+
+1. 打开「安全」面板，点击**启用两步验证**；系统生成 Base32 密钥（仅显示一次）。
+2. 将密钥手动录入 Google Authenticator / 1Password / Authy 等任意 TOTP 应用（本项目不调用任何外部二维码服务，符合 CSP 策略）。
+3. 输入应用显示的 6 位动态码，点击**确认启用**。
+
+启用后：
+
+- Dashboard 登录需 **管理员 Token + 动态码**，登录态以签名 Cookie 维持（HttpOnly，不落前端明文）。
+- 所有管理写操作（增删改客户端、重置 Token、测试告警）除 Token 外还需动态码；纯静态 Token 单独无法执行写操作。
+- 只读监控（Grafana 拉取、`/metrics`、只读 Token）不受影响，保持无感。
+
+**丢失设备恢复**：若丢失 TOTP 设备，可通过 SQLite 清除 2FA 配置后重新绑定：
+
+```bash
+sqlite3 data/monitor.db "DELETE FROM admin_config;"
+```
+
+（生产环境 `SESSION_SECRET` 应设为固定随机值，否则服务端重启会使所有登录态失效。）
 
 ## 第三方依赖与隐私
 - **前端零外链**：ECharts 已本地化到 `server/public/vendor/echarts.min.js`，仪表盘不加载任何 CDN 脚本；服务端设置了严格 `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; ...`，**不含 `unsafe-inline`**，前端交互全部用 `addEventListener` 事件委托实现，从根本上阻断 XSS 窃取管理员 Token 的路径。

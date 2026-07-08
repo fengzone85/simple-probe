@@ -1,5 +1,14 @@
 # Changelog
 
+## P3：管理员两步验证 TOTP（⑧）（2026-07-09）
+
+- **TOTP 第二因素（RFC 6238，零依赖）**（`server/src/totp.js`）：新增 `/api/admin/2fa/{status,setup,enable,disable}`。启用后，所有管理**写操作**（`POST /agents`、`PUT/DELETE /agents/:id`、`reset-token`、`/test-alert`）除静态 Token 外还需动态码——`adminOnly` 守卫在 `is2FAEnabled()` 时要求 `cookie.totp` 或 `X-TOTP` 头，纯静态 Admin Token 单独调用写接口将返回 `401 {need_totp:true}`。
+- **登录态改为签名 Session Cookie**（`server/src/auth.js`）：Dashboard 登录 `POST /api/login` 校验 Token（+TOTP）后签发 `HttpOnly; Secure; SameSite=Strict` 签名 Cookie，前端**不再明文存储 Admin Token**（`localStorage` 方案改为 Cookie），从根本上消除前端 XSS 窃取 Token 的风险；`/api/logout` 清除会话。
+- **兼容性**：只读拉取（Grafana、`/metrics` Bearer、`READONLY_TOKEN`）不强制 2FA，保持无感；旧式 `X-Admin-Token` 头仍被接受（用于程序化访问，但不满足 2FA 时写操作仍被拒）。
+- **前端**（`public/index.html`、`public/app.js`）：登录/退出按钮 + 动态码输入；「安全」面板内新增 2FA 启用/禁用流程（密钥手动录入，不依赖外部二维码服务，符合 CSP）。
+- **配置**（`server/.env.example`）：新增 `SESSION_SECRET`（Cookie 签名密钥，建议固定随机值）、`SESSION_TTL_MS`（默认 12h）。
+- 单测：TOTP 算法通过 RFC 6238 标准测试向量校验。
+
 ## P3：Windows 受控端（⑨）（2026-07-09）
 
 - **新增 `agent/windows/`**：与 Linux Docker Agent **协议完全兼容**的 Windows 原生受控端（基于 `psutil`），上报相同字段结构，服务端无需任何改动即可接收。
