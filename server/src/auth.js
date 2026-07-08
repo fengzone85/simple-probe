@@ -3,12 +3,13 @@ const crypto = require('crypto');
 const db = require('./db');
 const totp = require('./totp');
 
-// 恒定时间比较，避免令牌比较的时序侧信道。长度不等直接返回 false（不抛异常）。
+// 恒定时间比较，避免令牌比较的时序侧信道。
+// 先对两端统一做 SHA-256 哈希再比较固定长度摘要，消除「长度不等提前返回」暴露的
+// Token 长度侧信道（审查 v3.1 8.2#4：攻击者原可据此探测 Token 长度）。
 function safeEqual(a, b) {
-  const ba = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
 function agentAuth(req, res, next) {

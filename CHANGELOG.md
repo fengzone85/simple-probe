@@ -1,5 +1,8 @@
 # Changelog
 
+## 安全加固：Token 比较消除长度侧信道（2026-07-09）
+- 落实安全审查 v3.1 的 8.2#4（可选低危）：`auth.js` 的 `safeEqual()` 原实现在两端长度不等时提前 `return false`，会泄露 Token 长度（长度侧信道）。改为先对两端统一做 SHA-256 哈希，再对固定长度摘要做 `timingSafeEqual`，彻底消除长度差异带来的时序泄漏。哈希确定且等长，`timingSafeEqual` 不再可能因长度不同而抛错。
+
 ## 遗留项修复：ECharts 实例释放 + SQLite 文件权限收敛（2026-07-09）
 - ECharts 实例未释放（审查观察项）：重写 `ensureChart()`，在每次取用时检测缓存实例是否已脱离文档（详情页 DOM 重写 / 切换 agent 场景），脱离则 `dispose()` 旧实例并在当前 DOM 上重建，修复「图表空白 + 实例泄漏」；`drawLine()` 增加 `ensureChart` 返回 `null` 的保护。
 - SQLite 明文（审查观察项）：`db.js` 打开数据库后将文件权限 `chmod 0o600`（仅属主可读写），按最小权限原则收敛监控数据的暴露面；挂载文件系统不支持 chmod 时静默忽略。
