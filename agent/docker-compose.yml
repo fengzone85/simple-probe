@@ -1,0 +1,21 @@
+services:
+  agent:
+    image: host-monitor-agent:latest
+    build: .
+    restart: unless-stopped
+    # 共享宿主机网络命名空间，使 /proc/net/dev 反映真实流量（默认 bridge 网络读到的是容器视角）
+    network_mode: host
+    environment:
+      SERVER_URL: "${SERVER_URL}"
+      AGENT_ID: "${AGENT_ID}"
+      AGENT_TOKEN: "${AGENT_TOKEN}"
+      INTERVAL: "15"
+      # 只读挂载宿主机根目录到 /host，DISK_PATH 指向它，才能统计真实根盘使用率
+      DISK_PATH: "/host"
+    # 只读挂载宿主机根，供读取真实磁盘使用率（agent 仅做 statvfs，不会写入）
+    volumes:
+      - /:/host:ro
+      - agent-data:/data
+
+volumes:
+  agent-data:

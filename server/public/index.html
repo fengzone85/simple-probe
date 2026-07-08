@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自托管监控 · Host Monitor</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="vendor/echarts.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>🛰️ 自托管监控<span class="dot">.</span></h1>
+    <div class="spacer"></div>
+    <div class="token-bar">
+      <input id="tokenInput" type="password" placeholder="管理员 Token" />
+      <button class="btn sm" id="btnSave">保存</button>
+    </div>
+    <button class="btn" id="btnNew">+ 新建客户端</button>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+  <section class="overview" id="overview"></section>
+  <section class="grid" id="grid"></section>
+
+  <!-- Detail modal -->
+  <div class="modal-bg" id="detailModal">
+    <div class="modal">
+      <h2 id="detailTitle">客户端详情</h2>
+      <div class="range" id="rangeBar">
+        <button class="btn ghost sm active" data-r="1h">1小时</button>
+        <button class="btn ghost sm" data-r="6h">6小时</button>
+        <button class="btn ghost sm" data-r="24h">24小时</button>
+        <button class="btn ghost sm" data-r="7d">7天</button>
+      </div>
+      <div class="charts">
+        <div class="chart"><h4>CPU 使用率 (%)</h4><div id="cCpu"></div></div>
+        <div class="chart"><h4>内存使用率 (%)</h4><div id="cMem"></div></div>
+        <div class="chart"><h4>系统负载 (1/5/15m)</h4><div id="cLoad"></div></div>
+        <div class="chart"><h4>网络速率 (KB/s)</h4><div id="cNet"></div></div>
+        <div class="chart"><h4>硬盘使用率 (%)</h4><div id="cDisk"></div></div>
+        <div class="chart"><h4>本月流量 (vs 配额)</h4><div id="cTraffic"></div></div>
+      </div>
+      <div class="actions"><button class="btn ghost" data-close="detailModal">关闭</button></div>
+    </div>
+  </div>
+
+  <!-- Create modal -->
+  <div class="modal-bg" id="createModal">
+    <div class="modal">
+      <h2>新建客户端</h2>
+      <div class="field"><label>名称</label><input id="c_name" placeholder="如 香港CN2-01" /></div>
+      <div class="row2">
+        <div class="field"><label>商家</label><input id="c_merchant" placeholder="如 腾讯云 / 搬瓦工" /></div>
+        <div class="field"><label>到期时间</label><input id="c_expire" type="date" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>月流量配额 (GB，0=不限)</label><input id="c_quota" type="number" value="0" /></div>
+        <div class="field"><label>备注</label><input id="c_note" placeholder="可选" /></div>
+      </div>
+      <div id="createResult"></div>
+      <div class="actions">
+        <button class="btn ghost" data-close="createModal">取消</button>
+        <button class="btn" id="btnCreateSubmit">创建并生成 Token</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div class="modal-bg" id="editModal">
+    <div class="modal">
+      <h2>编辑客户端</h2>
+      <input type="hidden" id="e_id" />
+      <div class="field"><label>名称</label><input id="e_name" /></div>
+      <div class="row2">
+        <div class="field"><label>商家</label><input id="e_merchant" /></div>
+        <div class="field"><label>到期时间</label><input id="e_expire" type="date" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>月流量配额 (GB)</label><input id="e_quota" type="number" /></div>
+        <div class="field"><label>备注</label><input id="e_note" /></div>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="btnDelete">删除</button>
+        <button class="btn ghost" data-close="editModal">取消</button>
+        <button class="btn" id="btnEditSubmit">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+services:
+  server:
+    build: .
+    restart: unless-stopped
+    # 仅绑定本机回环，配合宿主机 Nginx/宝塔 反代；外部无法直接触达 8080。
+    # 若 Nginx 也是独立 Docker 容器（非宿主机进程），请改用共享 Docker 网络 + 服务名互访，并删除此端口映射。
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/monitor.db
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - AGENT_INTERVAL=15
+      - OFFLINE_THRESHOLD_SEC=60
+      - RETENTION_DAYS=30
+      - ALERT_CPU_PCT=90
+      - ALERT_MEM_PCT=90
+      - ALERT_COOLDOWN_SEC=1800
+      - SMTP_HOST=smtp.qq.com
+      - SMTP_PORT=465
+      - SMTP_SECURE=true
+      - SMTP_USER=3986232@qq.com
+      - SMTP_PASS=${SMTP_PASS}
+      - ALERT_FROM=3986232@qq.com
+      - ALERT_TO=3986232@qq.com
+    volumes:
+      - server-data:/data
+
+volumes:
+  server-data:
