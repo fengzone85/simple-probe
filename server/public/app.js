@@ -37,7 +37,11 @@ async function api(url, opts = {}) {
   const headers = Object.assign({ 'X-Admin-Token': ADMIN_TOKEN }, opts.headers || {});
   const res = await fetch(url, Object.assign({}, opts, { headers }));
   if (res.status === 401) { toast('未授权：请先填写管理员 Token'); throw new Error('unauthorized'); }
-  if (!res.ok) throw new Error('HTTP ' + res.status);
+  if (!res.ok) {
+    let msg = 'HTTP ' + res.status;
+    try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 function closeModal(id) { $(id).classList.remove('show'); }
@@ -194,6 +198,22 @@ function setRange(r, el) {
   loadDetail();
 }
 
+// ---------- test alert ----------
+async function sendTestAlert() {
+  if (!ADMIN_TOKEN) { toast('请先在右上角填写管理员 Token'); return; }
+  const btn = $('btnTestAlert');
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '发送中…';
+  try {
+    const r = await api('/api/test-alert', { method: 'POST' });
+    toast('已发送：' + (r.message || '请检查邮件 / Telegram'));
+  } catch (e) {
+    toast('发送失败：' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
 // ---------- create ----------
 function openCreate() { openModal('createModal'); }
 async function submitCreate() {
@@ -246,6 +266,7 @@ async function submitDelete() {
 // ---------- event bindings (替代内联 onclick，以适配严格的 CSP) ----------
 function bindEvents() {
   $('btnSave').addEventListener('click', saveToken);
+  $('btnTestAlert').addEventListener('click', sendTestAlert);
   $('btnNew').addEventListener('click', openCreate);
   $('btnCreateSubmit').addEventListener('click', submitCreate);
   $('btnEditSubmit').addEventListener('click', submitEdit);
