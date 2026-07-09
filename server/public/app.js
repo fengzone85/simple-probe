@@ -298,6 +298,31 @@ async function sendTestAlert() {
 
 // ---------- create ----------
 function openCreate() { openModal('createModal'); }
+// Nezha 风格三 tab 一键命令：Linux 原生 / Docker / Windows。
+// pfx 用于区分不同弹窗的 cmd 元素 id（创建=c，编辑/重置=e），避免重复 id。
+function renderInstallCmds(inst, pfx) {
+  const id = s => s + '_' + pfx;
+  return `
+      <div class="install-cmds">
+        <div class="tabs">
+          <button class="btn ghost sm active" data-tab="native">Linux 原生版</button>
+          <button class="btn ghost sm" data-tab="docker">Docker 版</button>
+          <button class="btn ghost sm" data-tab="windows">Windows 版</button>
+        </div>
+        <div class="tab-pane" data-pane="native">
+          <pre class="cmd" id="${id('cmdNative')}">${esc(inst.native_cmd || '')}</pre>
+          <button class="btn sm" data-copy="${id('cmdNative')}">复制 Linux 原生版命令</button>
+        </div>
+        <div class="tab-pane" data-pane="docker" style="display:none">
+          <pre class="cmd" id="${id('cmdDocker')}">${esc(inst.docker_cmd || '')}</pre>
+          <button class="btn sm" data-copy="${id('cmdDocker')}">复制 Docker 版命令</button>
+        </div>
+        <div class="tab-pane" data-pane="windows" style="display:none">
+          <pre class="cmd" id="${id('cmdWindows')}">${esc(inst.windows_cmd || '')}</pre>
+          <button class="btn sm" data-copy="${id('cmdWindows')}">复制 Windows 版命令</button>
+        </div>
+      </div>`;
+}
 async function submitCreate() {
   try {
     const r = await api('/api/agents', {
@@ -311,21 +336,8 @@ async function submitCreate() {
     const inst = r.install || {};
     $('createResult').innerHTML = `
       <div class="token-show">AGENT_ID: ${r.id}<br>AGENT_TOKEN: ${r.token}</div>
-      <p class="hint">在被控端服务器粘贴下面任一条命令即可完成接入（二选一）：</p>
-      <div class="install-cmds" id="installCmds">
-        <div class="tabs">
-          <button class="btn ghost sm active" data-tab="native">原生版（systemd）</button>
-          <button class="btn ghost sm" data-tab="docker">Docker 版</button>
-        </div>
-        <div class="tab-pane" data-pane="native">
-          <pre class="cmd" id="cmdNative">${esc(inst.native_cmd || '')}</pre>
-          <button class="btn sm" data-copy="cmdNative">复制原生版命令</button>
-        </div>
-        <div class="tab-pane" data-pane="docker" style="display:none">
-          <pre class="cmd" id="cmdDocker">${esc(inst.docker_cmd || '')}</pre>
-          <button class="btn sm" data-copy="cmdDocker">复制 Docker 版命令</button>
-        </div>
-      </div>`;
+      <p class="hint">在被控端粘贴下面任一条命令即可完成接入（三选一）：</p>
+      ${renderInstallCmds(inst, 'c')}`;
     toast('创建成功，请复制安装命令');
     refresh();
   } catch (e) { toast('创建失败：' + e.message); }
@@ -366,8 +378,12 @@ async function resetToken() {
   if (!confirm('确认重置该客户端 Token？旧 Token 立即失效，受控端需改用新 Token 后重启。')) return;
   try {
     const r = await api(`/api/agents/${id}/reset-token`, { method: 'POST' });
-    $('editResult').innerHTML = `<div class="token-show">新 AGENT_TOKEN: ${r.token}<br><br>请将以上更新到受控端 docker run 的环境变量后重启。</div>`;
-    toast('Token 已重置，请复制新 Token');
+    const inst = r.install || {};
+    $('editResult').innerHTML = `
+      <div class="token-show">新 AGENT_TOKEN: ${r.token}</div>
+      <p class="hint">请将以下三条一键命令之一粘贴到对应被控端重装 / 重启（已自动带入新 Token，无需手改环境变量）：</p>
+      ${renderInstallCmds(inst, 'e')}`;
+    toast('Token 已重置，请复制安装命令');
   } catch (e) { toast('重置失败：' + e.message); }
 }
 
@@ -423,9 +439,10 @@ function bindEvents() {
     }
     const tab = e.target.closest('[data-tab]');
     if (tab) {
+      const container = tab.closest('.install-cmds');
       const t = tab.getAttribute('data-tab');
-      document.querySelectorAll('#installCmds [data-tab]').forEach(b => b.classList.toggle('active', b === tab));
-      document.querySelectorAll('#installCmds [data-pane]').forEach(p => { p.style.display = (p.getAttribute('data-pane') === t) ? '' : 'none'; });
+      container.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b === tab));
+      container.querySelectorAll('[data-pane]').forEach(p => { p.style.display = (p.getAttribute('data-pane') === t) ? '' : 'none'; });
       return;
     }
     const cp = e.target.closest('[data-copy]');

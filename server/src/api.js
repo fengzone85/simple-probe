@@ -29,8 +29,9 @@ router.use(rateLimit);
 const { num, str, validateReport } = require('./validate');
 
 // ---- 一键安装命令生成（Nezha 风格：服务端把地址 + 每客户端令牌预填进命令）----
-// 两条接入路径：① 原生版（systemd + Python，install.sh 自举下载配套文件）；
-// ② Docker 版（现场从源码 git 构建镜像并运行，无需任何仓库账号）。
+// 三条接入路径：① 原生版（Linux systemd + Python，install.sh 自举下载配套文件）；
+// ② Docker 版（现场从源码 git 构建镜像并运行，无需任何仓库账号）；
+// ③ Windows 版（PowerShell 一键：下载 install.ps1 → 自举拉取 agent 载荷 → 注册计划任务）。
 // 仓库 raw 基址（install.sh 位于根，agent 载荷位于 <base>/agent/）；可用 AGENT_RAW_REPO 覆盖。
 const REPO_BASE = (process.env.AGENT_RAW_REPO || 'https://raw.githubusercontent.com/fengzone85/simple-probe/master').replace(/\/+$/, '');
 const AGENT_GIT_REPO = process.env.AGENT_GIT_REPO || 'https://github.com/fengzone85/simple-probe.git#master:agent';
@@ -55,7 +56,11 @@ function buildInstallCommands(serverUrl, agentId, agentToken, interval) {
 chmod +x install.sh
 sudo ./install.sh --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id ${agentId} --token ${agentToken} --interval ${iv}`;
   const docker = `docker build -t simple-probe-agent ${AGENT_GIT_REPO} \\\n  && docker run -d --name simple-probe-agent --restart unless-stopped \\\n     -e SERVER_URL=${serverUrl} -e AGENT_ID=${agentId} -e AGENT_TOKEN=${agentToken} -e INTERVAL=${iv} \\\n     -v simple-probe-state:/data \\\n     simple-probe-agent`;
-  return { server_url: serverUrl, native_cmd: native, docker_cmd: docker };
+  // Windows 版：一条 PowerShell 命令。外层用双引号、内部一律单引号，避免引号嵌套。
+  // install.ps1 会自举下载 windows_agent.py/win_collector.py/requirements.txt 到
+  // %ProgramData%\simple-probe-agent，并注册登录自启的计划任务。需以管理员身份运行。
+  const windows = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:TEMP 'sp-agent-install.ps1'; iwr '${REPO_BASE}/agent/windows/install.ps1' -OutFile $p -UseBasicParsing; & $p -RegisterTask -Repo '${REPO_BASE}/agent/windows' -ServerUrl '${serverUrl}' -AgentId '${agentId}' -AgentToken '${agentToken}' -Interval ${iv}"`;
+  return { server_url: serverUrl, native_cmd: native, docker_cmd: docker, windows_cmd: windows };
 }
 
 // ---- Agent report (push) ----
@@ -189,7 +194,9 @@ router.delete('/agents/:id', adminOnly, (req, res) => {
 router.post('/agents/:id/reset-token', adminOnly, (req, res) => {
   const token = db.resetAgentToken(req.params.id);
   if (!token) return res.status(404).json({ error: 'not found' });
-  res.json({ ok: true, token });
+  // 重置后同样回带三条一键命令：用户直接复制重装即可，无需手改环境变量。
+  const install = buildInstallCommands(getPublicBaseUrl(req), req.params.id, token, AGENT_INTERVAL_DEFAULT);
+  res.json({ ok: true, token, install });
 });
 
 // ---- Admin: send a test alert to verify notify channels (email / Telegram) ----
