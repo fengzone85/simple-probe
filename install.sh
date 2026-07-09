@@ -154,10 +154,32 @@ ensure_deps() {
     return 0
 }
 
+# ── 启动并确认 Docker 守护进程真正就绪（含 socket activation 兜底）─────────────────
+start_docker_daemon() {
+    systemctl enable docker 2>/dev/null || true
+    systemctl start docker 2>/dev/null || true
+    local i
+    for i in $(seq 1 10); do
+        docker info >/dev/null 2>&1 && return 0
+        sleep 2
+    done
+    # 部分环境 docker.service 走 socket activation 会报
+    # “no sockets found via socket activation”，禁用 socket 后直启 service 即可
+    systemctl disable docker.socket 2>/dev/null || true
+    systemctl stop docker.socket 2>/dev/null || true
+    systemctl restart docker 2>/dev/null || true
+    for i in $(seq 1 10); do
+        docker info >/dev/null 2>&1 && return 0
+        sleep 2
+    done
+    return 1
+}
+
 # ── Docker 保障 ────────────────────────────────────────────────────────────────
 ensure_docker() {
+    # 客户端已装时，先尝试拉起守护进程，避免无谓重装
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then
-        return 0
+        start_docker_daemon && return 0
     fi
     # 官方安装脚本依赖 curl，确保基础工具就绪
     command -v curl >/dev/null 2>&1 || ensure_deps || true
@@ -181,8 +203,6 @@ ensure_docker() {
         curl -fsSL https://get.docker.com | sh
     fi
 
-    systemctl enable --now docker 2>/dev/null || true
-
     # 兜底：buildx 偶发未装上时显式补装（需先移除 Debian 自带的 docker-buildx）
     if ! docker buildx version >/dev/null 2>&1; then
         apt-get remove -y docker-buildx 2>/dev/null || true
@@ -192,10 +212,12 @@ ensure_docker() {
           || true
     fi
 
-    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then
+    start_docker_daemon || true
+
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         return 0
     fi
-    echo -e "${RED}[错误] Docker 安装失败，请手动安装 Docker 与 compose / buildx 插件后重试${NC}" >&2
+    echo -e "${RED}[错误] Docker 安装失败或守护进程无法启动，请手动排查后重试${NC}" >&2
     return 1
 }
 
