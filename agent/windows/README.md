@@ -79,3 +79,123 @@ powershell -ExecutionPolicy Bypass -File install.ps1 `
 
 Agent **只发起出站 HTTPS 请求**到 `SERVER_URL/api/report`，不在本机开放任何入站端口，
 防火墙无需放行。若服务端在自建 VPS 上，请确保该 VPS 的 443 可达。
+
+---
+
+## 原生 Linux 部署（systemd）
+
+> 如果你的 Linux 机器上没有 Docker，或者追求**最小资源占用**（~15–25 MB 内存，无 Docker 守护进程开销），
+> 可以直接用 systemd 形态部署。
+
+### 适合场景
+
+| 场景 | 推荐 | 理由 |
+|------|------|------|
+| 256 MB ~ 512 MB 小鸡 | **原生 systemd** | Docker 守护进程本身占用 50–120 MB，原生无此开销 |
+| 已有 Docker 的机器（多容器管理） | **Docker** | 环境统一，与服务端体系一致 |
+| 批量部署（Ansible / 脚本） | **原生 systemd** | shell 脚本循环更通用，不要求目标机有 Docker |
+| 追求最小资源 | **原生 systemd** | 唯一选择 |
+
+### 资源占用对比
+
+| 形态 | 内存占用 | 额外磁盘 |
+|------|---------|---------|
+| **Docker** | ~65–150 MB（含 Docker 守护进程） | ~85 MB+（镜像层） |
+| **原生 systemd** | **~15–25 MB**（纯 Python） | **~5 MB**（脚本） |
+
+对 256 MB 小鸡来说，原生形态比 Docker 形态**节省约 125 MB 可用内存**。
+
+### 一键安装（非交互）
+
+下载脚本到机器，审查后再执行：
+
+```bash
+# 1. 下载（不改名，保留 .sh 方便后续卸载）
+curl -o install.sh https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/install.sh
+
+# 2. 审查脚本（强烈建议）
+cat install.sh
+
+# 3. 以 root 运行，支持非交互参数
+sudo bash install.sh \
+    --server  http://your-server:8008 \
+    --id      your-node-id \
+    --token   your-agent-token \
+    --interval 15
+```
+
+> **安全提示**：`install.sh` 本身不做任何网络下载，只读取本地同目录下的 `agent.py` / `collector.py` 文件。
+> 建议将仓库克隆到机器后运行，而非 `curl | bash` 自动下载。
+
+### 一键安装（交互式）
+
+```bash
+sudo bash install.sh
+# 依次输入：SERVER_URL、AGENT_ID、AGENT_TOKEN（输入不回显）
+```
+
+### systemd 管理命令
+
+```bash
+# 查看状态
+systemctl status simple-probe-agent
+
+# 查看实时日志
+journalctl -u simple-probe-agent -f
+
+# 重启（如更新配置后）
+systemctl restart simple-probe-agent
+
+# 停止
+systemctl stop simple-probe-agent
+
+# 开机禁用
+systemctl disable simple-probe-agent
+```
+
+### 环境变量说明
+
+原生部署通过 `/etc/simple-probe/agent.env` 注入环境变量，无需手动 export：
+
+| 变量 | 说明 | 原生默认值 |
+|------|------|-----------|
+| `DISK_PATH` | 磁盘统计路径 | `/`（原生直接读本机根） |
+| `STATE_FILE` | 月度流量状态文件 | `/var/lib/simple-probe/state.json` |
+| `SERVER_URL` | 服务端地址 | 来自 agent.env |
+| `AGENT_ID` | 节点 ID | 来自 agent.env |
+| `AGENT_TOKEN` | 认证令牌 | 来自 agent.env |
+| `INTERVAL` | 上报间隔（秒） | `15` |
+
+### ICMP 探测说明
+
+- **有 ping**：优先使用 ICMP 探测网络质量
+- **无 ping**（minimal 镜像）：自动回退到 TCP 探测，**功能不受影响**
+- 如需完整 ICMP 能力：
+  ```bash
+  # Debian/Ubuntu
+  apt-get install -y iputils-ping
+  # Alpine
+  apk add --no-cache iputils
+  ```
+
+### 完全卸载
+
+```bash
+sudo bash uninstall.sh
+```
+
+### 部署架构
+
+```
+/opt/simple-probe/          ← 程序目录（agent.py / collector.py）
+/var/lib/simple-probe/      ← 状态目录（state.json，simple-probe 用户可写）
+/etc/simple-probe/          ← 配置目录（agent.env，root 专属）
+/etc/systemd/system/simple-probe-agent.service  ← systemd unit
+```
+
+### 与 Docker 形态的关系
+
+- **共用同一套代码**：`agent.py` 和 `collector.py` 两份部署形态完全共享，零差异
+- **行为完全一致**：两种形态的上报协议相同，服务端无需任何改动
+- **可随时迁移**：Docker → 原生 或 原生 → Docker，只需重新 `install.sh`，无需重新获取 AGENT_ID / AGENT_TOKEN（服务端按 ID 识别节点）
+- **state.json 兼容**：两种形态共用同一路径语义，迁移后月度流量累计不丢失
