@@ -86,6 +86,11 @@ CREATE TABLE IF NOT EXISTS admin_config (
   const existing = new Set(db.prepare('PRAGMA table_info(agents)').all().map((r) => r.name));
   if (!existing.has('grp')) db.exec("ALTER TABLE agents ADD COLUMN grp TEXT DEFAULT ''");
 }
+// schema migration: agents 增加国家字段（受控端国旗，存 ISO 3166-1 alpha-2 代码，如 CN/US/JP）
+{
+  const existing = new Set(db.prepare('PRAGMA table_info(agents)').all().map((r) => r.name));
+  if (!existing.has('country')) db.exec("ALTER TABLE agents ADD COLUMN country TEXT DEFAULT ''");
+}
 
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const genToken = () => crypto.randomBytes(24).toString('hex');
@@ -95,10 +100,10 @@ const stmts = {
   getAgent: db.prepare('SELECT * FROM agents WHERE id = ?'),
   getAgents: db.prepare('SELECT * FROM agents ORDER BY created_at DESC'),
   insertAgent: db.prepare(`INSERT INTO agents
-    (id, name, token_hash, merchant, note, expire_at, monthly_quota_gb, grp, created_at, last_seen)
-    VALUES (@id, @name, @token_hash, @merchant, @note, @expire_at, @monthly_quota_gb, @grp, @created_at, 0)`),
+    (id, name, token_hash, merchant, note, expire_at, monthly_quota_gb, grp, country, created_at, last_seen)
+    VALUES (@id, @name, @token_hash, @merchant, @note, @expire_at, @monthly_quota_gb, @grp, @country, @created_at, 0)`),
   updateAgent: db.prepare(`UPDATE agents SET
-    name=@name, merchant=@merchant, note=@note, expire_at=@expire_at, monthly_quota_gb=@monthly_quota_gb, grp=@grp
+    name=@name, merchant=@merchant, note=@note, expire_at=@expire_at, monthly_quota_gb=@monthly_quota_gb, grp=@grp, country=@country
     WHERE id=@id`),
   deleteAgent: db.prepare('DELETE FROM agents WHERE id = ?'),
   touch: db.prepare('UPDATE agents SET last_seen=?, os=?, hostname=? WHERE id=?'),
@@ -132,6 +137,7 @@ const createAgent = (fields) => {
     expire_at: fields.expire_at || '',
     monthly_quota_gb: Number(fields.monthly_quota_gb) || 0,
     grp: fields.grp || '',
+    country: (fields.country || '').toUpperCase().slice(0, 2),
     created_at: Date.now()
   });
   return { id, token };
@@ -158,7 +164,8 @@ const updateAgent = (id, f) => stmts.updateAgent.run({
   note: f.note || '',
   expire_at: f.expire_at || '',
   monthly_quota_gb: Number(f.monthly_quota_gb) || 0,
-  grp: f.grp || ''
+  grp: f.grp || '',
+  country: (f.country || '').toUpperCase().slice(0, 2)
 });
 
 const deleteAgent = (id) => {
@@ -199,8 +206,14 @@ const set2FAEnabled = (b) => setConfig(TWOFA_ENABLED, b ? '1' : '0');
 const SETTINGS_KEY = 'ui_settings';
 const NOTIFY_KEY = 'notify_config';
 function getUiSettings() {
-  const def = { site_title: '', custom_css: '', default_sort: 'created', group_order: [] };
-  try { const o = JSON.parse(getConfig(SETTINGS_KEY) || '{}'); return Object.assign(def, o); }
+  const def = { site_title: '', custom_css: '', default_sort: 'created', group_order: [], alert: { cpu_pct: 90, mem_pct: 90, offline_sec: 60 }, public_enabled: false, home_layout: 'grid' };
+  try {
+    const o = JSON.parse(getConfig(SETTINGS_KEY) || '{}');
+    const merged = Object.assign(def, o);
+    // 嵌套对象（alert）需单独合并，避免服务端缺字段时整体回退到默认
+    merged.alert = Object.assign(def.alert, (o && o.alert) || {});
+    return merged;
+  }
   catch (e) { return def; }
 }
 function setUiSettings(o) { setConfig(SETTINGS_KEY, JSON.stringify(o || {})); }

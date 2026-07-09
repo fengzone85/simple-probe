@@ -92,7 +92,10 @@ function showLogin(need) {
 async function loadAppSettings() {
   try {
     const s = await api('/api/settings');
-    appSettings = Object.assign({ site_title: '', custom_css: '', default_sort: 'created', group_order: [] }, s.ui || {});
+    const def = { site_title: '', custom_css: '', default_sort: 'created', group_order: [], alert: { cpu_pct: 90, mem_pct: 90, offline_sec: 60 } };
+    const ui = Object.assign(def, s.ui || {});
+    ui.alert = Object.assign(def.alert, (s.ui && s.ui.alert) || {});
+    appSettings = ui;
     applyCustomCss();
     applySiteTitle();
     if ($('sortSelect')) $('sortSelect').value = appSettings.default_sort || 'created';
@@ -104,6 +107,7 @@ function applySiteTitle() {
   document.title = t + ' · Host Monitor';
   if ($('siteTitle')) $('siteTitle').innerHTML = '🛰️ ' + esc(t) + '<span class="dot">.</span>';
   if ($('loginTitle')) $('loginTitle').textContent = t;
+  if ($('siteTitleSide')) $('siteTitleSide').textContent = t;
 }
 function populateGroupDatalist() {
   const dl = $('groupList'); if (!dl) return;
@@ -134,6 +138,11 @@ function pctClass(p) {
   if (p >= 90) return 'bar-danger';
   if (p >= 75) return 'bar-warn';
   return '';
+}
+// 告警阈值（来自设置中心，回退默认 90/90/60）。卡片高亮与后端推送共用同一判定基准。
+function getAlert() {
+  const d = { cpu_pct: 90, mem_pct: 90, offline_sec: 60 };
+  return Object.assign(d, (appSettings && appSettings.alert) || {});
 }
 // 网络质量 probe 阈值色 class
 function probeClass(ms) {
@@ -202,6 +211,31 @@ async function loadOverview() {
     <div class="stat"><div class="k">离线</div><div class="v red">${o.offline}</div></div>
     <div class="stat"><div class="k">平均 CPU<small> (在线)</small></div><div class="v">${o.avg_cpu}<small>%</small></div></div>
     <div class="stat"><div class="k">平均内存<small> (在线)</small></div><div class="v">${o.avg_mem}<small>%</small></div></div>`;
+
+  // 流量概览 + 分组概览（对标 Komari 的流量 / 地区概览区块）
+  const usedGB = (o.traffic_used_bytes || 0) / 1024 ** 3;
+  const quota = Number(o.total_quota_gb) || 0;
+  const pct = quota > 0 ? Math.min(100, (usedGB / quota) * 100) : 0;
+  const grp = (o.groups || []).map(g => `<div class="grp-chip"><span class="gc-name">${esc(g.name)}</span><span class="gc-count">${g.online}/${g.total} 在线</span></div>`).join('') || '<div class="empty small">暂无分组</div>';
+  $('ovExtra').innerHTML = `
+    <div class="ov-block traffic-block">
+      <div class="ov-block-h">📶 流量概览 <small>（本月累计 · 仅在线节点）</small></div>
+      <div class="ov-traffic">
+        <div class="t-num">↓↑ ${fmtBytes(o.traffic_used_bytes || 0)}</div>
+        <div class="t-bar"><div class="bar"><i class="${pctClass(pct)}" data-pct="${pct}"></i></div></div>
+        <div class="t-quota">${quota > 0 ? ('总配额 ' + quota + ' GB · 已用 ' + pct.toFixed(1) + '%') : '未配置总流量配额'}</div>
+      </div>
+    </div>
+    <div class="ov-block group-block">
+      <div class="ov-block-h">🗂️ 分组概览</div>
+      <div class="grp-list">${grp}</div>
+    </div>`;
+  $('ovExtra').querySelectorAll('.bar > i').forEach((el) => {
+    const p = Number(el.dataset.pct || 0);
+    el.style.width = p + '%';
+    const cls = pctClass(p);
+    el.className = cls ? 'bar-i ' + cls : 'bar-i';
+  });
 }
 
 // ---------- grid ----------
@@ -265,6 +299,39 @@ function renderGrid(agents, histMap) {
     const cls = pctClass(p);
     el.className = cls ? 'bar-i ' + cls : 'bar-i';
   });
+  renderClients();
+}
+
+// 客户端列表视图（对标 Komari 的 Clients 列表）：紧凑表格，点击行打开详情面板。
+function renderClients() {
+  const el = $('clientsTable');
+  if (!el) return;
+  if (!currentAgents || !currentAgents.length) { el.innerHTML = '<div class="empty">暂无客户端，点击侧栏「+ 新建客户端」。</div>'; $('clientsCount').textContent = ''; return; }
+  const al = getAlert();
+  const rows = sortAgents(currentAgents);
+  let online = 0;
+  const body = rows.map((a) => {
+    const m = a.latest || {};
+    if (a.online) online++;
+    const dotCls = a.online ? ((m.cpu >= al.cpu_pct || m.mem_pct >= al.mem_pct) ? 'alert' : 'on') : 'offline';
+    const cpuCls = m.cpu >= al.cpu_pct ? 'danger' : (m.cpu >= 75 ? 'warn' : '');
+    const memCls = m.mem_pct >= al.mem_pct ? 'danger' : (m.mem_pct >= 75 ? 'warn' : '');
+    const diskCls = pctClass(m.disk_pct);
+    return `<tr data-id="${a.id}">
+      <td><div class="ct-name"><span class="status ${dotCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.hostname || '')} · ${esc(a.os || '')}</div></td>
+      <td>${a.group ? `<span class="ct-tag">${esc(a.group)}</span>` : '<span class="ct-sub">—</span>'}</td>
+      <td>${a.country && flagEmoji(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)}</span>` : '<span class="ct-sub">—</span>'}</td>
+      <td>${a.online ? `<span class="ct-num ${cpuCls}">${fmtPct(m.cpu)}</span>` : '<span class="ct-sub">离线</span>'}</td>
+      <td>${a.online ? `<span class="ct-num ${memCls}">${fmtPct(m.mem_pct)}</span>` : '<span class="ct-sub">—</span>'}</td>
+      <td>${a.online ? `<span class="ct-num ${diskCls}">${fmtPct(m.disk_pct)}</span>` : '<span class="ct-sub">—</span>'}</td>
+      <td class="ct-num">${fmtBytes((m.net_rx_month || 0) + (m.net_tx_month || 0))}</td>
+      <td class="ct-sub">${m.uptime ? fmtUptime(m.uptime) : '—'}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table class="ctable">
+    <thead><tr><th>名称</th><th>分组</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>本月流量</th><th>在线时长</th></tr></thead>
+    <tbody>${body}</tbody></table>`;
+  $('clientsCount').textContent = `共 ${rows.length} 台 · 在线 ${online}`;
 }
 function cardHtml(a, hist) {
   const m = a.latest || {};
@@ -276,8 +343,10 @@ function cardHtml(a, hist) {
     expireBadge = `<span class="badge ${cls}">${txt}</span>`;
   }
   const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
-  // 计算告警态：CPU/内存/磁盘任一 >= 阈值
-  const alert = (m.cpu >= 90 || m.mem_pct >= 90 || (m.disk_pct != null && m.disk_pct >= 90));
+  const countryBadge = (a.country && flagEmoji(a.country)) ? `<span class="badge flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)} ${esc(countryName(a.country))}</span>` : '';
+  // 计算告警态：CPU/内存超过设置阈值，或磁盘 >= 90%
+  const al = getAlert();
+  const alert = (m.cpu >= al.cpu_pct || m.mem_pct >= al.mem_pct || (m.disk_pct != null && m.disk_pct >= 90));
   const statusCls = a.online ? (alert ? 'alert' : 'on') : '';
   const cpuArr = hist.map(x => x.cpu);
   const memArr = hist.map(x => x.mem_pct);
@@ -292,7 +361,7 @@ function cardHtml(a, hist) {
   return `<div class="card" data-id="${a.id}">
     <div class="top">
       <span class="status ${statusCls}"></span>
-      <h3>${esc(a.name)}</h3>${merchant}${expireBadge}
+      <h3>${esc(a.name)}</h3>${merchant}${expireBadge}${countryBadge}
     </div>
     <div class="meta">${esc(a.hostname || '')} · ${esc(a.os || '')}</div>
     ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
@@ -529,7 +598,13 @@ async function sendTestAlert() {
 }
 
 // ---------- create ----------
-function openCreate() { openModal('createModal'); }
+function populateCountrySelect() {
+  const opts = '<option value="">不设置</option>' + COUNTRIES.map(c => `<option value="${c.code}">${flagEmoji(c.code)} ${esc(c.name)}</option>`).join('');
+  const cs = $('c_country'), es = $('e_country');
+  if (cs) cs.innerHTML = opts;
+  if (es) es.innerHTML = opts;
+}
+function openCreate() { populateCountrySelect(); if ($('c_country')) $('c_country').value = ''; openModal('createModal'); }
 // Nezha 风格三 tab 一键命令：Linux 原生 / Docker / Windows。
 // pfx 用于区分不同弹窗的 cmd 元素 id（创建=c，编辑/重置=e），避免重复 id。
 function renderInstallCmds(inst, pfx) {
@@ -563,6 +638,7 @@ async function submitCreate() {
         name: $('c_name').value.trim(), merchant: $('c_merchant').value.trim(),
         expire_at: $('c_expire').value, monthly_quota_gb: Number($('c_quota').value) || 0,
         group: $('c_group').value.trim(),
+        country: $('c_country').value.trim(),
         note: $('c_note').value.trim()
       })
     });
@@ -583,6 +659,7 @@ async function openEdit(id) {
   $('e_id').value = a.id; $('e_name').value = a.name; $('e_merchant').value = a.merchant || '';
   $('e_expire').value = (a.expire_at || '').slice(0, 10); $('e_quota').value = a.monthly_quota_gb || 0;
   $('e_group').value = a.group || '';
+  $('e_country').value = a.country || '';
   $('e_note').value = a.note || '';
   $('editResult').innerHTML = '';
   openModal('editModal');
@@ -595,6 +672,7 @@ async function submitEdit() {
         name: $('e_name').value.trim(), merchant: $('e_merchant').value.trim(),
         expire_at: $('e_expire').value, monthly_quota_gb: Number($('e_quota').value) || 0,
         group: $('e_group').value.trim(),
+        country: $('e_country').value.trim(),
         note: $('e_note').value.trim()
       })
     });
@@ -656,11 +734,23 @@ function updateNavButtons(id) {
 async function openSettings() {
   try {
     const s = await api('/api/settings');
-    appSettings = Object.assign({ site_title: '', custom_css: '', default_sort: 'created', group_order: [] }, s.ui || {});
+    const def = { site_title: '', custom_css: '', default_sort: 'created', group_order: [], alert: { cpu_pct: 90, mem_pct: 90, offline_sec: 60 } };
+    const ui = Object.assign(def, s.ui || {});
+    ui.alert = Object.assign(def.alert, (s.ui && s.ui.alert) || {});
+    appSettings = ui;
     const n = s.notify || {};
     $('s_site_title').value = appSettings.site_title || '';
     $('s_custom_css').value = appSettings.custom_css || '';
     $('s_default_sort').value = appSettings.default_sort || 'created';
+    const al = appSettings.alert;
+    $('a_cpu').value = al.cpu_pct;
+    $('a_mem').value = al.mem_pct;
+    $('a_offline').value = al.offline_sec;
+    $('p_enabled').checked = !!appSettings.public_enabled;
+    const hl = appSettings.home_layout || 'grid';
+    document.querySelectorAll('input[name="homelayout"]').forEach(r => { r.checked = (r.value === hl); });
+    const th = localStorage.getItem('theme') || 'auto';
+    document.querySelectorAll('input[name="theme"]').forEach(r => { r.checked = (r.value === th); });
     $('n_smtp_host').value = n.smtp_host || '';
     $('n_smtp_port').value = n.smtp_port || '';
     $('n_smtp_secure').checked = !!n.smtp_secure;
@@ -671,6 +761,7 @@ async function openSettings() {
     $('n_tg_token').value = '';
     $('n_tg_chat').value = n.telegram_chat_id || '';
     renderGroupOrder();
+    await load2FAStatus();
     openModal('settingsModal');
   } catch (e) { toast('加载设置失败：' + e.message); }
 }
@@ -705,11 +796,19 @@ function addGroup() {
   renderGroupOrder();
 }
 async function saveSettings() {
+  const al = appSettings.alert || { cpu_pct: 90, mem_pct: 90, offline_sec: 60 };
   const ui = {
     site_title: $('s_site_title').value.trim(),
     custom_css: $('s_custom_css').value,
     default_sort: $('s_default_sort').value,
-    group_order: appSettings.group_order || []
+    group_order: appSettings.group_order || [],
+    public_enabled: $('p_enabled') ? $('p_enabled').checked : false,
+    home_layout: (document.querySelector('input[name="homelayout"]:checked') || {}).value || 'grid',
+    alert: {
+      cpu_pct: Number($('a_cpu').value) || al.cpu_pct,
+      mem_pct: Number($('a_mem').value) || al.mem_pct,
+      offline_sec: Number($('a_offline').value) || al.offline_sec
+    }
   };
   const notify = {
     smtp_host: $('n_smtp_host').value.trim(),
@@ -744,6 +843,16 @@ async function onSortChange() {
   loadAgents();
 }
 
+// ---------- 侧栏视图切换（仪表盘 / 客户端） ----------
+let currentView = 'dashboard';
+function setView(v) {
+  document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === v));
+  if ($('viewDashboard')) $('viewDashboard').hidden = (v !== 'dashboard');
+  if ($('viewClients')) $('viewClients').hidden = (v !== 'clients');
+  if (v === 'clients') renderClients();
+  currentView = v;
+}
+
 // ---------- live traffic (安全增强：仅前端轮询既有 /api/agents/:id，不新增指令通道) ----------
 function updateLiveTraffic(m) {
   if (!m) return;
@@ -771,8 +880,11 @@ function bindEvents() {
   $('loginTotp').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('btnLogout').addEventListener('click', doLogout);
   $('btnTestAlert').addEventListener('click', sendTestAlert);
-  $('btnSecurity').addEventListener('click', async () => { await load2FAStatus(); openModal('securityModal'); });
-  $('btnSettings').addEventListener('click', openSettings);
+  $('navSecurity').addEventListener('click', () => openModal('securityModal'));
+  $('navSettings').addEventListener('click', openSettings);
+  const pvAdmin = $('pvAdmin'); if (pvAdmin) pvAdmin.addEventListener('click', showLoginPage);
+  document.querySelectorAll('[data-pvlayout]').forEach(b => { b.addEventListener('click', () => setPublicLayout(b.getAttribute('data-pvlayout'))); });
+  populateCountrySelect();
   $('btnTheme').addEventListener('click', cycleTheme);
   $('tfaToggle').addEventListener('click', start2FASetup);
   $('btnNew').addEventListener('click', openCreate);
@@ -793,6 +905,24 @@ function bindEvents() {
     if (editBtn) { openEdit(editBtn.getAttribute('data-edit')); return; }
     const card = e.target.closest('.card[data-id]');
     if (card) openDetail(card.getAttribute('data-id'));
+  });
+  // 客户端列表视图：点击行打开详情面板
+  $('clientsTable').addEventListener('click', (e) => {
+    const row = e.target.closest('tr[data-id]');
+    if (row) openDetail(row.getAttribute('data-id'));
+  });
+  // 侧栏导航：仪表盘 / 客户端 切换视图
+  document.querySelectorAll('.nav-item[data-view]').forEach(b => {
+    b.addEventListener('click', () => setView(b.getAttribute('data-view')));
+  });
+  // 主题偏好单选（设置内）：选中即生效并记忆
+  document.querySelectorAll('input[name="theme"]').forEach(r => {
+    r.addEventListener('change', (e) => {
+      const v = e.target.value;
+      localStorage.setItem('theme', v);
+      applyTheme(v);
+      toast('主题：' + ({ auto: '跟随系统', light: '亮色', dark: '暗色' }[v]));
+    });
   });
   document.addEventListener('click', (e) => {
     const closeEl = e.target.closest('[data-close]');
@@ -844,14 +974,98 @@ bindEvents();
 load2FAStatus();
 initLoad();
 
+// ---------- 游客 / 公开状态页 ----------
+const BUILD_TIME = '2026/06/21 20:56:11 (GMT+8)';
+let publicAgents = [];
+let publicLayout = 'grid';
+let publicOverview = null;
+async function enterPublic(meta) {
+  publicLayout = meta.home_layout || 'grid';
+  const title = meta.site_title || '自托管监控';
+  const lp = $('loginPage'); if (lp) lp.style.display = 'none';
+  const app = $('app'); if (app) app.hidden = true;
+  const pv = $('publicView'); if (pv) pv.hidden = false;
+  if ($('pvTitle')) $('pvTitle').textContent = title;
+  if ($('pvFooter')) $('pvFooter').innerHTML = 'Powered by ' + esc(title) + ' · Build Time: ' + BUILD_TIME;
+  document.title = title + ' · 状态页';
+  applyTheme(localStorage.getItem('theme') || 'auto');
+  await loadPublic();
+}
+async function loadPublic() {
+  try {
+    const [ov, ag] = await Promise.all([
+      fetch('/api/public/overview').then(r => r.json()).catch(() => null),
+      fetch('/api/public/agents').then(r => r.json()).catch(() => [])
+    ]);
+    publicOverview = ov; publicAgents = Array.isArray(ag) ? ag : [];
+  } catch (e) { publicOverview = null; publicAgents = []; }
+  renderPublic();
+}
+function pvStat(k, v, cls) { return `<div class="stat"><div class="k">${k}</div><div class="v ${cls || ''}">${v}</div></div>`; }
+function pubCardHtml(a) {
+  const flag = a.country && flagEmoji(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)}</span>` : '';
+  const statusCls = a.online ? 'on' : 'offline';
+  const cpu = a.cpu, mem = a.mem_pct, disk = a.disk_pct;
+  return `<div class="card pub-card">
+    <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${flag}</div>
+    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · 离线'}</div>
+    <div class="metrics">
+      <div class="metric"><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
+      <div class="metric"><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
+      <div class="metric"><div class="m-info"><span class="m-lbl">硬盘</span><span class="m-val ${pctClass(disk)}">${fmtPct(disk)}</span></div></div>
+    </div>
+    <div class="foot"><span class="uptime">⏱ ${a.online ? fmtUptime(a.uptime) : '—'}</span><span class="ct-sub">↓↑ ${fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0))}</span></div>
+  </div>`;
+}
+function pubListHtml(list) {
+  if (!list || !list.length) return '<div class="empty">暂无客户端数据</div>';
+  const body = list.map(a => {
+    const flag = a.country && flagEmoji(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)}</span>` : '';
+    const statusCls = a.online ? 'on' : 'offline';
+    return `<tr>
+      <td><div class="ct-name"><span class="status ${statusCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · 离线'}</div></td>
+      <td>${flag || '<span class="ct-sub">—</span>'}</td>
+      <td class="ct-num ${a.online && a.cpu >= 90 ? 'danger' : (a.online && a.cpu >= 75 ? 'warn' : '')}">${fmtPct(a.cpu)}</td>
+      <td class="ct-num ${a.online && a.mem_pct >= 90 ? 'danger' : (a.online && a.mem_pct >= 75 ? 'warn' : '')}">${fmtPct(a.mem_pct)}</td>
+      <td class="ct-num ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</td>
+      <td class="ct-num">${fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0))}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="ctable"><thead><tr><th>名称</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>本月流量</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function renderPublic() {
+  const ov = publicOverview;
+  if ($('pvOverview')) {
+    if (ov) $('pvOverview').innerHTML = pvStat('客户端总数', ov.total) + pvStat('在线', ov.online, 'green') + pvStat('离线', ov.offline, 'red');
+    else $('pvOverview').innerHTML = '';
+  }
+  const grid = $('pvGrid'), list = $('pvList');
+  if (!grid || !list) return;
+  if (publicLayout === 'list') {
+    grid.hidden = true; list.hidden = false;
+    list.innerHTML = pubListHtml(publicAgents);
+  } else {
+    grid.hidden = false; list.hidden = true;
+    grid.innerHTML = publicAgents.length ? publicAgents.map(pubCardHtml).join('') : '<div class="empty">暂无客户端数据</div>';
+  }
+}
+function setPublicLayout(v) {
+  publicLayout = v;
+  renderPublic();
+  document.querySelectorAll('[data-pvlayout]').forEach(b => b.classList.toggle('active', b.getAttribute('data-pvlayout') === v));
+}
+
 async function initLoad() {
   try {
     const r = await fetch('/api/admin/2fa/status', { credentials: 'same-origin' });
-    if (r.status === 401) { showLoginPage(); return; }
-    const st = await r.json();
-    totpRequired = !!st.enabled;
-    enterApp();
-  } catch (e) { showLoginPage(); }
+    if (r.status === 200) { const st = await r.json(); totpRequired = !!st.enabled; enterApp(); setView('dashboard'); return; }
+  } catch (e) {}
+  // 未登录：尝试以游客身份加载公开状态页
+  try {
+    const meta = await (await fetch('/api/public/meta')).json();
+    if (meta.public_enabled) { enterPublic(meta); return; }
+  } catch (e) {}
+  showLoginPage();
 }
 setInterval(() => { if (detailId && $('detailPanel') && $('detailPanel').classList.contains('open')) loadDetail(); else refresh(); }, 10000);
 window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));

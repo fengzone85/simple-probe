@@ -135,24 +135,99 @@ router.get('/agents/:id/metrics', adminOrReadonly, (req, res) => {
 });
 
 // ---- Admin: overview ----
+// 在原有「总数/在线/离线/平均 CPU/内存」基础上，补充「流量概览」与「分组概览」，
+// 供前端对标 Komari 的流量/地区概览区块直接渲染。
 router.get('/overview', adminOrReadonly, (req, res) => {
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
   const now = Date.now();
   const agents = db.getAgents();
   let online = 0, cpuSum = 0, memSum = 0, cnt = 0;
+  let trafficUsedBytes = 0; // 本月累计流量（在线节点 latest 的收+发）
+  let totalQuotaGB = 0;
+  const groups = {}; // 分组 -> { total, online }
   for (const a of agents) {
-    if (a.last_seen && now - a.last_seen < offlineSec * 1000) {
+    const isOn = a.last_seen && now - a.last_seen < offlineSec * 1000;
+    if (isOn) {
       online++;
       const m = db.getLatestMetric(a.id);
-      if (m) { cpuSum += m.cpu || 0; memSum += m.mem_pct || 0; cnt++; }
+      if (m) { cpuSum += m.cpu || 0; memSum += m.mem_pct || 0; cnt++; trafficUsedBytes += (m.net_rx_month || 0) + (m.net_tx_month || 0); }
     }
+    const g = (a.grp || '').trim() || '未分组';
+    const ge = groups[g] || (groups[g] = { total: 0, online: 0 });
+    ge.total++;
+    if (isOn) ge.online++;
+    totalQuotaGB += Number(a.monthly_quota_gb) || 0;
   }
   res.json({
     total: agents.length,
     online,
     offline: agents.length - online,
     avg_cpu: cnt ? +(cpuSum / cnt).toFixed(1) : 0,
-    avg_mem: cnt ? +(memSum / cnt).toFixed(1) : 0
+    avg_mem: cnt ? +(memSum / cnt).toFixed(1) : 0,
+    traffic_used_bytes: Math.round(trafficUsedBytes),
+    total_quota_gb: totalQuotaGB,
+    groups: Object.keys(groups).map(name => ({ name, total: groups[name].total, online: groups[name].online }))
+  });
+});
+
+// ---- Public（游客）视图：无需登录，受 ui_settings.public_enabled 控制 ----
+// 返回脱敏概览（仅总数/在线/离线/分组），不含任何敏感指标均值。
+function publicDisabled(res) { return res.status(403).json({ error: 'public view disabled' }); }
+router.get('/public/overview', (req, res) => {
+  const ui = db.getUiSettings();
+  if (!ui.public_enabled) return publicDisabled(res);
+  const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
+  const now = Date.now();
+  const agents = db.getAgents();
+  let online = 0;
+  const groups = {};
+  for (const a of agents) {
+    const isOn = a.last_seen && now - a.last_seen < offlineSec * 1000;
+    if (isOn) online++;
+    const g = (a.grp || '').trim() || '未分组';
+    const ge = groups[g] || (groups[g] = { total: 0, online: 0 });
+    ge.total++; if (isOn) ge.online++;
+  }
+  res.json({
+    total: agents.length, online, offline: agents.length - online,
+    groups: Object.keys(groups).map(name => ({ name, total: groups[name].total, online: groups[name].online }))
+  });
+});
+
+// 返回脱敏的公开 agent 列表（不含 token / note / 商家 / 到期 / 配额等敏感字段）。
+router.get('/public/agents', (req, res) => {
+  const ui = db.getUiSettings();
+  if (!ui.public_enabled) return publicDisabled(res);
+  const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
+  const now = Date.now();
+  const list = db.getAgents().map((a) => {
+    const latest = db.getLatestMetric(a.id);
+    const online = a.last_seen && (now - a.last_seen) < offlineSec * 1000;
+    const m = online && latest ? latest : null;
+    return {
+      id: a.id, name: a.name, group: a.grp || '',
+      country: a.country || '',
+      online: !!online,
+      cpu: m ? m.cpu : null,
+      mem_pct: m ? m.mem_pct : null,
+      disk_pct: m ? m.disk_pct : null,
+      net_rx_month: m ? m.net_rx_month : 0,
+      net_tx_month: m ? m.net_tx_month : 0,
+      uptime: m ? m.uptime : 0,
+      os: m ? (m.os || '') : '',
+      hostname: online ? (a.hostname || '') : ''
+    };
+  });
+  res.json(list);
+});
+
+// 游客视图元信息（无需登录）：站点标题、是否开放、首页默认布局。
+router.get('/public/meta', (req, res) => {
+  const ui = db.getUiSettings();
+  res.json({
+    site_title: ui.site_title || '',
+    public_enabled: !!ui.public_enabled,
+    home_layout: ui.home_layout || 'grid'
   });
 });
 
@@ -164,7 +239,8 @@ router.post('/agents', adminOnly, (req, res) => {
     note: str(req.body.note, 500),
     expire_at: str(req.body.expire_at, 40),
     monthly_quota_gb: req.body.monthly_quota_gb,
-    grp: str(req.body.group, 60)
+    grp: str(req.body.group, 60),
+    country: str(req.body.country, 2)
   });
   // 创建时一次性把「地址 + 该客户端令牌」预填进两条一键命令返回（令牌仅此刻明文可用）。
   const install = buildInstallCommands(getPublicBaseUrl(req), id, token, AGENT_INTERVAL_DEFAULT);
@@ -181,7 +257,8 @@ router.put('/agents/:id', adminOnly, (req, res) => {
     note: str(req.body.note, 500),
     expire_at: str(req.body.expire_at, 40),
     monthly_quota_gb: req.body.monthly_quota_gb,
-    grp: str(req.body.group, 60)
+    grp: str(req.body.group, 60),
+    country: str(req.body.country, 2)
   });
   res.json({ ok: true });
 });

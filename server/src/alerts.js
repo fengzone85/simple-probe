@@ -91,9 +91,12 @@ async function alertThreshold(agent, type, msg, now, cooldown) {
 async function check() {
   const agents = db.getAgents();
   const now = Date.now();
-  const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
-  const cpuAlert = Number(process.env.ALERT_CPU_PCT || 90);
-  const memAlert = Number(process.env.ALERT_MEM_PCT || 90);
+  // 阈值优先取「设置中心 / UI 配置」（前端可改），缺失时回退到 docker-compose 环境变量默认值。
+  const ui = db.getUiSettings();
+  const alertCfg = (ui && ui.alert) || {};
+  const offlineSec = Number(alertCfg.offline_sec || process.env.OFFLINE_THRESHOLD_SEC || 60);
+  const cpuAlert = Number(alertCfg.cpu_pct || process.env.ALERT_CPU_PCT || 90);
+  const memAlert = Number(alertCfg.mem_pct || process.env.ALERT_MEM_PCT || 90);
   const cooldown = Number(process.env.ALERT_COOLDOWN_SEC || 1800);
 
   for (const a of agents) {
