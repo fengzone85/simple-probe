@@ -6,6 +6,7 @@ let detailId = null;
 let detailRange = '24h';
 let liveTimer = null;
 let orderedAgentIds = [];
+let dragEl = null;
 const charts = {};
 
 // ---------- hash router (#/node/:id) ----------
@@ -241,14 +242,23 @@ function renderGrid(agents, histMap) {
   for (const g of keys.filter(k => !order.includes(k)).sort((a, b) => a.localeCompare(b))) if (g !== '未分组') ordered.push(g);
   if (groups['未分组']) ordered.push('未分组');
 
+  const customOrder = appSettings.custom_order || [];
   const html = ordered.map(g => {
-    const cards = groups[g].map(a => cardHtml(a, histMap[a.id] || [])).join('');
+    const cardsArr = groups[g].slice().sort((a, b) => {
+      const ia = customOrder.indexOf(a.id), ib = customOrder.indexOf(b.id);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    const cards = cardsArr.map(a => cardHtml(a, histMap[a.id] || [])).join('');
     return `<section class="group-section">
       <h3 class="group-title">${esc(g)} <span class="group-count">${groups[g].length}</span></h3>
       <div class="cards">${cards}</div>
     </section>`;
   }).join('');
   grid.innerHTML = html;
+  initDragSort();
   grid.querySelectorAll('.bar > i').forEach((el) => {
     const p = Number(el.dataset.pct || 0);
     el.style.width = p + '%';
@@ -362,6 +372,58 @@ function fallbackCopy(text) {
   try { document.execCommand('copy'); toast('已复制到剪贴板'); }
   catch (e) { toast('复制失败，请手动选择文本'); }
   document.body.removeChild(ta);
+}
+
+// ---------- 主题切换（🌗 暗 / 亮 / 跟随系统） ----------
+const THEMES = ['auto', 'light', 'dark'];
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+  else document.documentElement.removeAttribute('data-theme');
+}
+function cycleTheme() {
+  const cur = localStorage.getItem('theme') || 'auto';
+  const next = THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length];
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+  toast('主题：' + ({ auto: '跟随系统', light: '亮色', dark: '暗色' }[next]));
+}
+
+// ---------- 拖拽排序（桌面端 HTML5 Drag；移动端仍用排序下拉 default_sort） ----------
+function initDragSort() {
+  const grid = $('grid'); if (!grid) return;
+  grid.querySelectorAll('.cards').forEach(container => {
+    container.querySelectorAll('.card').forEach(card => {
+      card.setAttribute('draggable', 'true');
+      card.addEventListener('dragstart', (e) => { dragEl = card; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+      card.addEventListener('dragend', () => { card.classList.remove('dragging'); container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); persistSortOrder(); });
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const t = e.target.closest('.card');
+        if (t && t !== dragEl) { container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); t.classList.add('drag-over'); }
+      });
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const t = e.target.closest('.card');
+        if (t && t !== dragEl) {
+          const rect = t.getBoundingClientRect();
+          const after = (e.clientY - rect.top) > rect.height / 2;
+          container.insertBefore(dragEl, after ? t.nextSibling : t);
+        }
+      });
+    });
+  });
+}
+function collectOrder() {
+  const ids = [];
+  document.querySelectorAll('#grid .cards .card').forEach(c => ids.push(Number(c.dataset.id)));
+  return ids;
+}
+async function persistSortOrder() {
+  const ids = collectOrder();
+  try {
+    await api('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ui: { custom_order: ids } }) });
+    appSettings.custom_order = ids;
+  } catch (e) { toast('排序保存失败：' + e.message); }
 }
 
 // ---------- detail ----------
@@ -711,6 +773,7 @@ function bindEvents() {
   $('btnTestAlert').addEventListener('click', sendTestAlert);
   $('btnSecurity').addEventListener('click', async () => { await load2FAStatus(); openModal('securityModal'); });
   $('btnSettings').addEventListener('click', openSettings);
+  $('btnTheme').addEventListener('click', cycleTheme);
   $('tfaToggle').addEventListener('click', start2FASetup);
   $('btnNew').addEventListener('click', openCreate);
   $('btnCreateSubmit').addEventListener('click', submitCreate);
@@ -799,6 +862,7 @@ $('panelEdit').addEventListener('click', () => { if (detailId) openEdit(detailId
 $('panelReset').addEventListener('click', () => { if (detailId) openEdit(detailId); $('btnResetToken').click(); });
 $('panelDelete').addEventListener('click', () => { if (detailId) openEdit(detailId); setTimeout(() => $('btnDelete').click(), 50); });
 initRouter();
+applyTheme(localStorage.getItem('theme') || 'auto');
 
 // ---------- 2FA (TOTP) ----------
 async function load2FAStatus() {

@@ -13,6 +13,27 @@
   --yellow: #ffc24b;
   --shadow: 0 6px 20px rgba(0,0,0,.35);
 }
+:root[data-theme="light"] {
+  --bg: #f5f7fb; --bg-soft: #ffffff; --card: #ffffff; --card-hover: #eef2f8;
+  --border: #e3e8f0; --text: #1f2937; --muted: #6b7280; --accent: #2bb3a3;
+  --accent2: #4f8cff; --green: #2faa6a; --red: #e34960; --yellow: #d49b25;
+  --shadow: 0 6px 20px rgba(31,41,55,.08);
+}
+:root[data-theme="dark"] {
+  --bg: #0f1117; --bg-soft: #161a24; --card: #1a1f2b; --card-hover: #20273a;
+  --border: #2a3142; --text: #e6e9f0; --muted: #8b93a7; --accent: #36d1c4;
+  --accent2: #4f8cff; --green: #3ad07a; --red: #ff5d6c; --yellow: #ffc24b;
+  --shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+/* auto（不设置 data-theme）时跟随系统配色 */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="light"]) {
+    --bg: #f5f7fb; --bg-soft: #ffffff; --card: #ffffff; --card-hover: #eef2f8;
+    --border: #e3e8f0; --text: #1f2937; --muted: #6b7280; --accent: #2bb3a3;
+    --accent2: #4f8cff; --green: #2faa6a; --red: #e34960; --yellow: #d49b25;
+    --shadow: 0 6px 20px rgba(31,41,55,.08);
+  }
+}
 * { box-sizing: border-box; }
 body {
   margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
@@ -21,7 +42,7 @@ body {
 }
 header {
   display: flex; align-items: center; gap: 16px; padding: 18px 26px;
-  border-bottom: 1px solid var(--border); background: rgba(15,17,23,.7); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border); background: var(--bg-soft); backdrop-filter: blur(8px);
   position: sticky; top: 0; z-index: 20;
 }
 header h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .5px; }
@@ -321,3 +342,7 @@ header h1 .dot { color: var(--accent); }
 
 /* Panel body: ensure scroll area has room for action bar */
 .dp-body { flex: 1; overflow-y: auto; padding: 10px 14px 20px; }
+
+/* 拖拽排序视觉反馈 */
+.card.dragging { opacity: .5; }
+.card.drag-over { border-color: var(--accent); box-shadow: var(--shadow), 0 0 0 2px var(--accent); }
