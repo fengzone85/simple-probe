@@ -80,9 +80,12 @@ function populateGroupDatalist() {
   currentAgents.forEach(a => { const g = (a.group || '').trim(); if (g) set.add(g); });
   dl.innerHTML = Array.from(set).map(g => `<option value="${esc(g)}">`).join('');
 }
-function toast(msg) {
-  const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+function toast(msg, type) {
+  const t = $('toast'); t.textContent = msg;
+  t.className = 'toast' + (type ? ' toast-' + type : '');
+  t.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 function showBanner(msg) { const b = $('banner'); if (b) { b.textContent = msg; b.hidden = false; } }
 function hideBanner() { const b = $('banner'); if (b) b.hidden = true; }
@@ -94,6 +97,20 @@ function fmtBytes(b) {
   return n.toFixed(i ? 1 : 0) + ' ' + u[i];
 }
 function fmtPct(p) { return (p == null ? '—' : Number(p).toFixed(1)) + '%'; }
+// 进度条阈值色 class（加在 <i class="bar-xxx"> 上，CSS 负责着色）
+function pctClass(p) {
+  if (p == null) return '';
+  if (p >= 90) return 'bar-danger';
+  if (p >= 75) return 'bar-warn';
+  return '';
+}
+// 网络质量 probe 阈值色 class
+function probeClass(ms) {
+  if (ms == null) return 'probe-na';
+  if (ms >= 300) return 'probe-bad';
+  if (ms >= 100) return 'probe-warn';
+  return 'probe-ok';
+}
 function parseProbes(s) {
   if (!s) return {};
   try { const o = JSON.parse(s); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
@@ -202,7 +219,12 @@ function renderGrid(agents, histMap) {
     </section>`;
   }).join('');
   grid.innerHTML = html;
-  grid.querySelectorAll('.bar > i').forEach((el) => { el.style.width = (el.dataset.pct || 0) + '%'; });
+  grid.querySelectorAll('.bar > i').forEach((el) => {
+    const p = Number(el.dataset.pct || 0);
+    el.style.width = p + '%';
+    const cls = pctClass(p);
+    el.className = cls ? 'bar-i ' + cls : 'bar-i';
+  });
 }
 function cardHtml(a, hist) {
   const m = a.latest || {};
@@ -214,6 +236,9 @@ function cardHtml(a, hist) {
     expireBadge = `<span class="badge ${cls}">${txt}</span>`;
   }
   const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
+  // 计算告警态：CPU/内存/磁盘任一 >= 阈值
+  const alert = (m.cpu >= 90 || m.mem_pct >= 90 || (m.disk_pct != null && m.disk_pct >= 90));
+  const statusCls = a.online ? (alert ? 'alert' : 'on') : '';
   const cpuArr = hist.map(x => x.cpu);
   const memArr = hist.map(x => x.mem_pct);
   const rxArr = hist.map(x => +(x.net_rx_rate / 1024).toFixed(1));
@@ -222,30 +247,67 @@ function cardHtml(a, hist) {
   const tempArr = hist.map(x => x.temp);
   const swapArr = hist.map(x => x.swap_pct);
   const probes = parseProbes(m.probes);
-  const probeLabels = Object.keys(probes);
-  const probeSummary = probeLabels.length
-    ? probeLabels.map(l => `${esc(l)} ${probes[l].ok ? (probes[l].ms != null ? probes[l].ms + 'ms' : '✓') : '✕'}`).join(' · ')
-    : '—';
   const diskPct = m.disk_pct != null ? m.disk_pct : 0;
+  const diskCls = pctClass(diskPct);
   return `<div class="card" data-id="${a.id}">
     <div class="top">
-      <span class="status ${a.online ? 'on' : ''}"></span>
+      <span class="status ${statusCls}"></span>
       <h3>${esc(a.name)}</h3>${merchant}${expireBadge}
     </div>
-    <div class="meta">${esc(a.hostname || '')} · ${esc(a.os || '未知系统')}${m.uptime ? ' · 在线 ' + fmtUptime(m.uptime) : ''}</div>
+    <div class="meta">${esc(a.hostname || '')} · ${esc(a.os || '')}</div>
     ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
     <div class="metrics">
-      <div class="metric"><div class="lbl"><span>CPU</span><span>${fmtPct(m.cpu)}</span></div>${sparkline(cpuArr, '#36d1c4')}</div>
-      <div class="metric"><div class="lbl"><span>内存</span><span>${fmtPct(m.mem_pct)}</span></div>${sparkline(memArr, '#4f8cff')}</div>
-      <div class="metric"><div class="lbl"><span>负载</span><span>${m.load1 != null ? m.load1.toFixed(2) : '—'}</span></div>${sparkline(loadArr, '#ffc24b')}</div>
-      <div class="metric"><div class="lbl"><span>流量 ↓/↑</span><span>${(m.net_rx_rate/1024||0).toFixed(0)}/${(m.net_tx_rate/1024||0).toFixed(0)} KB/s</span></div>${sparkline(rxArr, '#3ad07a')}</div>
-      <div class="metric"><div class="lbl"><span>温度</span><span>${m.temp != null ? m.temp.toFixed(1) + '°C' : '—'}</span></div>${sparkline(tempArr, '#ff7a59')}</div>
-      <div class="metric"><div class="lbl"><span>Swap</span><span>${fmtPct(m.swap_pct)}</span></div>${sparkline(swapArr, '#a06bff')}</div>
-      <div class="metric"><div class="lbl"><span>网络</span><span>${probeSummary}</span></div></div>
+      <div class="metric">
+        <div class="m-spark">${sparkline(cpuArr, '#5cb6a5')}</div>
+        <div class="m-info">
+          <span class="m-lbl">CPU</span>
+          <span class="m-val ${pctClass(m.cpu)}">${fmtPct(m.cpu)}</span>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="m-spark">${sparkline(memArr, '#6c9eff')}</div>
+        <div class="m-info">
+          <span class="m-lbl">内存</span>
+          <span class="m-val ${pctClass(m.mem_pct)}">${fmtPct(m.mem_pct)}</span>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="m-spark">${sparkline(loadArr, '#ffce5c')}</div>
+        <div class="m-info">
+          <span class="m-lbl">负载</span>
+          <span class="m-val">${m.load1 != null ? m.load1.toFixed(2) : '—'}</span>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="m-spark">${sparkline(tempArr, '#ff7a59')}</div>
+        <div class="m-info">
+          <span class="m-lbl">温度</span>
+          <span class="m-val">${m.temp != null ? m.temp.toFixed(1) + '°C' : '—'}</span>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="m-spark">${sparkline(swapArr, '#a06bff')}</div>
+        <div class="m-info">
+          <span class="m-lbl">Swap</span>
+          <span class="m-val">${fmtPct(m.swap_pct)}</span>
+        </div>
+      </div>
+      <div class="metric metric-wide">
+        <div class="m-spark">${sparkline(rxArr, '#4dd591')}</div>
+        <div class="m-info">
+          <span class="m-lbl">网络</span>
+          <span class="m-val">↓ ${fmtRate(m.net_rx_rate)} &nbsp;↑ ${fmtRate(m.net_tx_rate)}</span>
+          ${Object.keys(probes).length ? `<div class="probes">${Object.keys(probes).map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(l)} ${p && p.ok ? (p.ms != null ? p.ms + 'ms' : '✓') : '✕'}</span>`; }).join('')}</div>` : ''}
+        </div>
+      </div>
     </div>
-    <div class="metric disk"><div class="lbl"><span>硬盘</span><span>${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span></div>
-      <div class="bar"><i data-pct="${diskPct}"></i></div></div>
+    <div class="disk-row">
+      <span class="m-lbl">硬盘</span>
+      <div class="bar"><i data-pct="${diskPct}"></i></div>
+      <span class="m-val ${diskCls}">${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span>
+    </div>
     <div class="foot">
+      <span class="uptime">⏱ ${m.uptime ? fmtUptime(m.uptime) : '—'}</span>
       <button class="btn ghost sm" data-edit="${a.id}">编辑</button>
     </div>
   </div>`;
@@ -447,8 +509,8 @@ async function submitEdit() {
         note: $('e_note').value.trim()
       })
     });
-    closeModal('editModal'); toast('已保存'); refresh();
-  } catch (e) { toast('保存失败：' + e.message); }
+    closeModal('editModal'); toast('已保存', 'ok'); refresh();
+  } catch (e) { toast('保存失败：' + e.message, 'err'); }
 }
 async function submitDelete() {
   if (!confirm('确认删除该客户端？历史数据将一并清除。')) return;
@@ -547,9 +609,9 @@ async function saveSettings() {
     applyCustomCss(); applySiteTitle();
     if ($('sortSelect')) $('sortSelect').value = ui.default_sort;
     closeModal('settingsModal');
-    toast('设置已保存');
+    toast('设置已保存', 'ok');
     refresh();
-  } catch (e) { toast('保存失败：' + e.message); }
+  } catch (e) { toast('保存失败：' + e.message, 'err'); }
 }
 async function testNotify() {
   try {
