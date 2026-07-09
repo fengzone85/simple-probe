@@ -54,6 +54,11 @@
       <div class="dp-header">
         <button class="btn ghost sm dp-back" id="dpBack">← 返回</button>
         <span class="dp-title" id="dpTitle">客户端详情</span>
+        <div class="dp-nav" id="dpNav">
+          <button class="btn ghost sm dp-nav-btn" id="dpPrev" title="上一个">‹</button>
+          <span id="dpNavIdx"></span>
+          <button class="btn ghost sm dp-nav-btn" id="dpNext" title="下一个">›</button>
+        </div>
       </div>
       <div class="dp-body">
         <div class="range" id="rangeBar">
@@ -126,6 +131,12 @@
           <button class="btn ghost" id="btnResetToken">重置 Token</button>
           <button class="btn ghost" data-close="editModal">取消</button>
           <button class="btn" id="btnEditSubmit">保存</button>
+        </div>
+        <!-- 面板快捷操作（在 detail panel 内直接编辑，无需回到仪表盘） -->
+        <div class="panel-actions" id="panelActions">
+          <button class="btn ghost sm" id="panelEdit">✏️ 编辑信息</button>
+          <button class="btn ghost sm" id="panelReset">🔑 重置 Token</button>
+          <button class="btn danger sm" id="panelDelete">🗑️ 删除节点</button>
         </div>
       </div>
     </div>

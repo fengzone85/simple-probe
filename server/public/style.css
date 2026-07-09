@@ -290,3 +290,34 @@ header h1 .dot { color: var(--accent); }
   .detail-panel { width: 100vw; }
   .detail-overlay { display: none; } /* on mobile tap outside = back already works */
 }
+
+/* ======================== */
+/* P3: Node switcher + panel actions */
+/* ======================== */
+/* Header: flex layout with nav pushed right */
+.dp-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dp-back { flex-shrink: 0; }
+.dp-title {
+  flex: 1; font-size: 14px; font-weight: 700;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dp-nav { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.dp-nav .dp-nav-btn { padding: 2px 8px; font-size: 18px; line-height: 1; min-width: unset; }
+#dpNavIdx { font-size: 11px; color: var(--muted); min-width: 28px; text-align: center; }
+#dpNavIdx:empty { display: none; }
+
+/* Panel action bar */
+.panel-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Panel body: ensure scroll area has room for action bar */
+.dp-body { flex: 1; overflow-y: auto; padding: 10px 14px 20px; }

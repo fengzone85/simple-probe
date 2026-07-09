@@ -5,6 +5,7 @@ let totpRequired = false;
 let detailId = null;
 let detailRange = '24h';
 let liveTimer = null;
+let orderedAgentIds = [];
 const charts = {};
 
 // ---------- hash router (#/node/:id) ----------
@@ -27,11 +28,13 @@ function closeDetailPanel() {
 function openDetailPanel(id) {
   if (detailId === id && $('detailPanel') && $('detailPanel').classList.contains('open')) return;
   detailId = id;
+  orderedAgentIds = currentAgents.map(a => a.id);
   const p = $('detailPanel'); const o = $('detailOverlay');
   if (p) p.classList.add('open');
   if (o) o.classList.add('show');
   loadDetail();
   startLiveTraffic(id);
+  updateNavButtons(id);
 }
 // 设置中心（站点名 / 自定义 CSS / 默认排序 / 分组顺序）
 let appSettings = { site_title: '', custom_css: '', default_sort: 'created', group_order: [] };
@@ -524,7 +527,7 @@ async function openEdit(id) {
 }
 async function submitEdit() {
   try {
-    await api(`/api/agents/${$('e_id').value}`, {
+    const r = await api(`/api/agents/${$('e_id').value}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: $('e_name').value.trim(), merchant: $('e_merchant').value.trim(),
@@ -533,14 +536,19 @@ async function submitEdit() {
         note: $('e_note').value.trim()
       })
     });
-    closeModal('editModal'); toast('已保存', 'ok'); refresh();
+    closeModal('editModal'); toast('已保存', 'ok');
+    // panel 打开时刷新面板数据（同节点保留面板不关）
+    if (detailId) { loadDetail(); updateNavButtons(detailId); }
+    refresh();
   } catch (e) { toast('保存失败：' + e.message, 'err'); }
 }
 async function submitDelete() {
   if (!confirm('确认删除该客户端？历史数据将一并清除。')) return;
   try {
     await api(`/api/agents/${$('e_id').value}`, { method: 'DELETE' });
-    closeModal('editModal'); toast('已删除'); refresh();
+    closeModal('editModal'); toast('已删除');
+    history.back(); // 面板同步关闭
+    refresh();
   } catch (e) { toast('删除失败：' + e.message); }
 }
 async function resetToken() {
@@ -555,6 +563,31 @@ async function resetToken() {
       ${renderInstallCmds(inst, 'e')}`;
     toast('Token 已重置，请复制安装命令');
   } catch (e) { toast('重置失败：' + e.message); }
+}
+
+// ---------- P3: panel 内直接操作 ----------
+function switchTo(id) { navigateDetail(id); }
+function switchToPrev() {
+  const i = orderedAgentIds.indexOf(Number(detailId));
+  if (i > 0) switchTo(orderedAgentIds[i - 1]);
+}
+function switchToNext() {
+  const i = orderedAgentIds.indexOf(Number(detailId));
+  if (i < orderedAgentIds.length - 1) switchTo(orderedAgentIds[i + 1]);
+}
+function updateNavButtons(id) {
+  const i = orderedAgentIds.indexOf(Number(id));
+  const total = orderedAgentIds.length;
+  const $prev = $('dpPrev'); const $next = $('dpNext'); const $idx = $('dpNavIdx');
+  if (total <= 1) {
+    if ($prev) $prev.style.visibility = 'hidden';
+    if ($next) $next.style.visibility = 'hidden';
+    if ($idx) $idx.textContent = '';
+    return;
+  }
+  if ($prev) $prev.style.visibility = i > 0 ? 'visible' : 'hidden';
+  if ($next) $next.style.visibility = i < total - 1 ? 'visible' : 'hidden';
+  if ($idx) $idx.textContent = `${i + 1} / ${total}`;
 }
 
 // ---------- 设置中心 ----------
@@ -760,6 +793,11 @@ async function initLoad() {
 setInterval(() => { if (detailId && $('detailPanel') && $('detailPanel').classList.contains('open')) loadDetail(); else refresh(); }, 10000);
 window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));
 $('dpBack').addEventListener('click', () => history.back());
+$('dpPrev').addEventListener('click', switchToPrev);
+$('dpNext').addEventListener('click', switchToNext);
+$('panelEdit').addEventListener('click', () => { if (detailId) openEdit(detailId); });
+$('panelReset').addEventListener('click', () => { if (detailId) openEdit(detailId); $('btnResetToken').click(); });
+$('panelDelete').addEventListener('click', () => { if (detailId) openEdit(detailId); setTimeout(() => $('btnDelete').click(), 50); });
 initRouter();
 
 // ---------- 2FA (TOTP) ----------
