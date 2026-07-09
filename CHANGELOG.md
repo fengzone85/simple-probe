@@ -1,5 +1,13 @@
 # Changelog
 
+## 单元测试：核心安全函数覆盖（2026-07-09）
+- 落实安全审查 v3.1「推荐后续关注 #2：为核心安全函数增加单元测试」。
+- 新增 `server/test/security.test.js`（Node 内置 `node:test`，零第三方依赖），覆盖：
+  - `totp.js`：RFC 6238 标准向量（8 位 SHA1，t=59/1111111109/…/20000000000）逐条比对；`verifyTOTP` 接受当前码与 ±1 窗口、拒绝越界/非数字、去除空格；`generateSecret` 输出合法 base32。
+  - `auth.js`：`safeEqual` 先哈希再比较、不同长度正确判否（验证长度侧信道已消除）；`signSession/verifySession` 往返一致、篡改签名与过期均拒绝。
+  - `validate.js`：正常负载、缺失核心字段返回字段为 `null`（拒绝逻辑在 `/report` 路由）、越界/非有限数归 `null`、字符串数字强制、probes 约束（≤8 键 / label≤24 / ms 范围 / ok 强制布尔 / 非对象与数组退回 `{}`）、`os`/`hostname` 超长归空串；`num`/`str` 边界。
+- 重构：`api.js` 中内联的 `num`/`str`/`validateReport` 抽离到独立 `server/src/validate.js`（纯函数、无 I/O/DB 依赖），`api.js` 改为引用，便于独立审计与测试；`package.json` 增加 `"test": "node --test test/security.test.js"`。
+
 ## 安全加固：Token 比较消除长度侧信道（2026-07-09）
 - 落实安全审查 v3.1 的 8.2#4（可选低危）：`auth.js` 的 `safeEqual()` 原实现在两端长度不等时提前 `return false`，会泄露 Token 长度（长度侧信道）。改为先对两端统一做 SHA-256 哈希，再对固定长度摘要做 `timingSafeEqual`，彻底消除长度差异带来的时序泄漏。哈希确定且等长，`timingSafeEqual` 不再可能因长度不同而抛错。
 
