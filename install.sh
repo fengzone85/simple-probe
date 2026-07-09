@@ -53,6 +53,9 @@ Simple Probe 一键部署脚本
   # 更新服务端（拉取最新源码并重建容器）
   sudo bash install.sh --update-server
 
+  # 更新受控端（保留已注册身份，拉取最新 agent 代码）
+  sudo bash install.sh --update-agent
+
   # 查看状态 / 卸载
   sudo bash install.sh --status
   sudo bash install.sh --uninstall
@@ -62,6 +65,7 @@ Simple Probe 一键部署脚本
   --install-agent         安装受控端（systemd）
   --update-script         更新本安装脚本为最新版
   --update-server         更新服务端（git pull + 重建容器）
+  --update-agent          更新受控端（systemd，保留原连接配置）
   --status                查看服务端/受控端状态
   --uninstall             卸载服务端与受控端
   --server URL            SERVER_URL
@@ -365,6 +369,47 @@ update_server() {
     echo -e "${GREEN}[OK]   服务端已更新并重启${NC}"
 }
 
+# ── 更新：受控端（保留已注册身份，拉取最新 agent 代码）──────────────────────────
+update_agent() {
+    ensure_deps || return 1
+    local envfile="/etc/simple-probe/agent.env"
+    if [[ ! -f "$envfile" ]]; then
+        echo -e "${RED}[错误] 未检测到受控端安装（缺少 $envfile），请先「安装受控端」${NC}" >&2
+        return 1
+    fi
+    # 从已存 env 读取注册身份，用户无需重新输入令牌
+    local SERVER_URL="" AGENT_ID="" AGENT_TOKEN="" INTERVAL=15 k v
+    while IFS='=' read -r k v; do
+        case "$k" in
+            SERVER_URL)  SERVER_URL="$v" ;;
+            AGENT_ID)    AGENT_ID="$v" ;;
+            AGENT_TOKEN) AGENT_TOKEN="$v" ;;
+            INTERVAL)    INTERVAL="$v" ;;
+        esac
+    done < "$envfile"
+    if [[ -z "$SERVER_URL" || -z "$AGENT_ID" || -z "$AGENT_TOKEN" ]]; then
+        echo -e "${RED}[错误] $envfile 缺少必要参数，请重新「安装受控端」${NC}" >&2
+        return 1
+    fi
+    echo -e "${YELLOW}[信息] 更新受控端（保留已注册身份，拉取最新 agent 代码）…${NC}"
+    echo -e "  服务端: ${GREEN}$SERVER_URL${NC}  节点: ${GREEN}$AGENT_ID${NC}"
+
+    # 强制从 GitHub 拉取最新 agent 载荷（无论本脚本是否本地旧版），保证更新到最新
+    local tmp; tmp="$(mktemp -d)"
+    echo -e "${YELLOW}[信息] 从 ${REPO_RAW}/agent 下载最新受控端载荷…${NC}"
+    for f in install.sh uninstall.sh agent.py collector.py simple-probe-agent.service; do
+        if ! download "$REPO_RAW/agent/$f" "$tmp/$f"; then
+            echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2
+            rm -rf "$tmp"; return 1
+        fi
+    done
+    chmod +x "$tmp/install.sh"
+    # 复用受控端安装脚本，传入已存身份 → 覆盖 agent.py 等并重启服务
+    bash "$tmp/install.sh" --server "$SERVER_URL" --id "$AGENT_ID" --token "$AGENT_TOKEN" --interval "$INTERVAL"
+    rm -rf "$tmp"
+    echo -e "${GREEN}[OK]   受控端已更新并重启${NC}"
+}
+
 # ── 状态 / 卸载 ────────────────────────────────────────────────────────────────
 status_all() {
     echo "== 服务端 (Docker) =="
@@ -409,20 +454,22 @@ show_menu() {
     echo ""
     echo "  1) 安装服务端 (Docker)"
     echo "  2) 安装受控端 Agent (systemd)"
-    echo "  3) 更新安装脚本 (install.sh 自身)"
-    echo "  4) 更新服务端 (拉取最新 + 重建)"
-    echo "  5) 查看状态"
-    echo "  6) 卸载"
+    echo "  3) 更新受控端 (拉取最新 agent 代码)"
+    echo "  4) 更新安装脚本 (install.sh 自身)"
+    echo "  5) 更新服务端 (拉取最新 + 重建)"
+    echo "  6) 查看状态"
+    echo "  7) 卸载"
     echo "  0) 退出"
     echo ""
-    read -r -p "请选择 [0-6]: " c
+    read -r -p "请选择 [0-7]: " c
     case "$c" in
         1) install_server ;;
         2) install_agent ;;
-        3) update_script ;;
-        4) update_server ;;
-        5) status_all ;;
-        6) uninstall_all ;;
+        3) update_agent ;;
+        4) update_script ;;
+        5) update_server ;;
+        6) status_all ;;
+        7) uninstall_all ;;
         *) echo "退出"; exit 0 ;;
     esac
 }
@@ -434,6 +481,7 @@ while [[ $# -gt 0 ]]; do
         --install-agent)  ACTION="agent";  shift ;;
         --update-script)  ACTION="update-script"; shift ;;
         --update-server)  ACTION="update-server"; shift ;;
+        --update-agent)   ACTION="update-agent"; shift ;;
         --status)         ACTION="status"; shift ;;
         --uninstall)      ACTION="uninstall"; shift ;;
         --server)      A_SERVER="$2"; shift 2 ;;
@@ -461,6 +509,7 @@ if [[ -n "$ACTION" ]]; then
         agent)     install_agent ;;
         update-script) update_script ;;
         update-server) update_server ;;
+        update-agent)  update_agent ;;
         status)    status_all ;;
         uninstall) uninstall_all ;;
     esac
