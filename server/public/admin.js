@@ -747,6 +747,7 @@ async function openSettings() {
     $('a_mem').value = al.mem_pct;
     $('a_offline').value = al.offline_sec;
     $('p_enabled').checked = !!appSettings.public_enabled;
+    populateThemeSelect();
     const hl = appSettings.home_layout || 'grid';
     document.querySelectorAll('input[name="homelayout"]').forEach(r => { r.checked = (r.value === hl); });
     const th = localStorage.getItem('theme') || 'auto';
@@ -795,6 +796,21 @@ function addGroup() {
   $('newGroupName').value = '';
   renderGroupOrder();
 }
+async function populateThemeSelect() {
+  const sel = $('p_theme'); if (!sel) return;
+  const cur = (appSettings && appSettings.public_theme) || 'default';
+  sel.innerHTML = '<option value="default">built-in（内置默认状态页）</option>';
+  try {
+    const list = await api('/api/public/themes');
+    (list || []).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = (t.name || t.id) + (t.author ? (' · by ' + t.author) : '');
+      sel.appendChild(o);
+    });
+  } catch (e) {}
+  sel.value = cur;
+}
 async function saveSettings() {
   const al = appSettings.alert || { cpu_pct: 90, mem_pct: 90, offline_sec: 60 };
   const ui = {
@@ -804,6 +820,7 @@ async function saveSettings() {
     group_order: appSettings.group_order || [],
     public_enabled: $('p_enabled') ? $('p_enabled').checked : false,
     home_layout: (document.querySelector('input[name="homelayout"]:checked') || {}).value || 'grid',
+    public_theme: $('p_theme') ? $('p_theme').value : 'default',
     alert: {
       cpu_pct: Number($('a_cpu').value) || al.cpu_pct,
       mem_pct: Number($('a_mem').value) || al.mem_pct,

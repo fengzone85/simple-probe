@@ -1,0 +1,6 @@
+{
+  "id": "demo",
+  "name": "Demo 极简皮肤",
+  "author": "simple-probe",
+  "description": "用于演示第三方皮肤机制的极简模板：仅依赖免登录的 /api/public/* 接口。"
+}

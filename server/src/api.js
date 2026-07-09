@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const db = require('./db');
 const { agentAuth, adminOrReadonly, adminOnly, requireAdmin, safeEqual, setSessionCookie, clearSessionCookie, SESSION_TTL } = require('./auth');
@@ -229,6 +231,25 @@ router.get('/public/meta', (req, res) => {
     public_enabled: !!ui.public_enabled,
     home_layout: ui.home_layout || 'grid'
   });
+});
+
+// 列出 public/themes/ 下的可用皮肤（供后台「皮肤模板」选择）。无需登录。
+router.get('/public/themes', (req, res) => {
+  const dir = path.join(__dirname, '..', 'public', 'themes');
+  const list = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const meta = { id: e.name, name: e.name, author: '', description: '' };
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(dir, e.name, 'manifest.json'), 'utf8'));
+        if (m && typeof m === 'object') Object.assign(meta, m);
+      } catch (_) {}
+      list.push(meta);
+    }
+  } catch (_) {}
+  res.json(list);
 });
 
 // ---- Admin: create agent ----

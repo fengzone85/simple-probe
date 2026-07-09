@@ -1,5 +1,6 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const db = require('./src/db');
 const api = require('./src/api');
@@ -85,6 +86,19 @@ app.get('/metrics', (req, res) => {
 });
 
 app.use('/api', api);
+
+// 公开状态页（首页 /）：支持第三方主题皮肤
+// 若 ui_settings.public_theme 指向 public/themes/<id> 下的皮肤，则投放该皮肤首页；
+// 否则回退到内置默认 public/index.html。主题目录名经白名单校验，杜绝路径穿越。
+const THEMES_DIR = path.join(__dirname, 'public', 'themes');
+app.get('/', (req, res, next) => {
+  const theme = (db.getUiSettings().public_theme || 'default');
+  if (theme && theme !== 'default' && /^[A-Za-z0-9_-]+$/.test(theme)) {
+    const fp = path.join(THEMES_DIR, theme, 'index.html');
+    if (fs.existsSync(fp)) return res.sendFile(fp);
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // periodic prune of old metrics
