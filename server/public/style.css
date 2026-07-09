@@ -95,6 +95,10 @@ body {
 .content { flex: 1; overflow-y: auto; }
 .view { padding: 0; }
 .view-dashboard { padding-bottom: 40px; }
+.view-settings { padding: 22px 26px 40px; }
+.settings-wrap { max-width: 780px; }
+.settings-wrap h2 { margin: 0 0 14px; font-size: 18px; }
+.settings-wrap .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
 
 /* ============ 概览统计 ============ */
 .overview { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; padding: 22px 26px 6px; }
@@ -250,8 +254,10 @@ body {
 .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
 .tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .tab-pane { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-#settingsModal h4 { margin: 16px 0 8px; font-size: 13px; color: var(--accent); }
-#settingsModal h4:first-child { margin-top: 0; }
+#viewSettings h4 { margin: 16px 0 8px; font-size: 13px; color: var(--accent); }
+#viewSettings h4:first-child { margin-top: 0; }
+.ct-actions { white-space: nowrap; }
+.ct-actions .btn { margin: 2px 4px 2px 0; }
 
 /* ============ 安全 / 2FA / 分组顺序 ============ */
 .sec-body { font-size: 13px; line-height: 1.7; color: var(--text); }

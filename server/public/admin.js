@@ -326,10 +326,15 @@ function renderClients() {
       <td>${a.online ? `<span class="ct-num ${diskCls}">${fmtPct(m.disk_pct)}</span>` : '<span class="ct-sub">—</span>'}</td>
       <td class="ct-num">${fmtBytes((m.net_rx_month || 0) + (m.net_tx_month || 0))}</td>
       <td class="ct-sub">${m.uptime ? fmtUptime(m.uptime) : '—'}</td>
+      <td class="ct-actions">
+        <button class="btn ghost sm" data-edit="${a.id}">编辑</button>
+        <button class="btn ghost sm" data-reset="${a.id}">重置</button>
+        <button class="btn danger sm" data-del="${a.id}">删除</button>
+      </td>
     </tr>`;
   }).join('');
   el.innerHTML = `<table class="ctable">
-    <thead><tr><th>名称</th><th>分组</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>本月流量</th><th>在线时长</th></tr></thead>
+    <thead><tr><th>名称</th><th>分组</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>本月流量</th><th>在线时长</th><th>操作</th></tr></thead>
     <tbody>${body}</tbody></table>`;
   $('clientsCount').textContent = `共 ${rows.length} 台 · 在线 ${online}`;
 }
@@ -705,6 +710,24 @@ async function resetToken() {
   } catch (e) { toast('重置失败：' + e.message); }
 }
 
+// 客户端列表快捷操作（无需打开编辑弹窗）
+async function deleteClient(id) {
+  if (!confirm('确认删除该客户端？历史数据将一并清除。')) return;
+  try {
+    await api(`/api/agents/${id}`, { method: 'DELETE' });
+    toast('已删除');
+    if (detailId && Number(detailId) === Number(id)) history.back();
+    refresh();
+  } catch (e) { toast('删除失败：' + e.message); }
+}
+async function resetClientToken(id) {
+  if (!confirm('确认重置该客户端 Token？旧 Token 立即失效，受控端需改用新 Token 后重启。')) return;
+  try {
+    const r = await api(`/api/agents/${id}/reset-token`, { method: 'POST' });
+    toast('Token 已重置：' + r.token);
+  } catch (e) { toast('重置失败：' + e.message); }
+}
+
 // ---------- P3: panel 内直接操作 ----------
 function switchTo(id) { navigateDetail(id); }
 function switchToPrev() {
@@ -763,7 +786,6 @@ async function openSettings() {
     $('n_tg_chat').value = n.telegram_chat_id || '';
     renderGroupOrder();
     await load2FAStatus();
-    openModal('settingsModal');
   } catch (e) { toast('加载设置失败：' + e.message); }
 }
 function renderGroupOrder() {
@@ -843,7 +865,6 @@ async function saveSettings() {
     appSettings = Object.assign(appSettings, ui);
     applyCustomCss(); applySiteTitle();
     if ($('sortSelect')) $('sortSelect').value = ui.default_sort;
-    closeModal('settingsModal');
     toast('设置已保存', 'ok');
     refresh();
   } catch (e) { toast('保存失败：' + e.message, 'err'); }
@@ -866,7 +887,9 @@ function setView(v) {
   document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === v));
   if ($('viewDashboard')) $('viewDashboard').hidden = (v !== 'dashboard');
   if ($('viewClients')) $('viewClients').hidden = (v !== 'clients');
+  if ($('viewSettings')) $('viewSettings').hidden = (v !== 'settings');
   if (v === 'clients') renderClients();
+  if (v === 'settings') openSettings();
   currentView = v;
 }
 
@@ -898,7 +921,7 @@ function bindEvents() {
   $('btnLogout').addEventListener('click', doLogout);
   $('btnTestAlert').addEventListener('click', sendTestAlert);
   $('navSecurity').addEventListener('click', () => openModal('securityModal'));
-  $('navSettings').addEventListener('click', openSettings);
+  $('btnSettingsBack').addEventListener('click', () => setView('dashboard'));
   populateCountrySelect();
   $('btnTheme').addEventListener('click', cycleTheme);
   $('tfaToggle').addEventListener('click', start2FASetup);
@@ -923,6 +946,12 @@ function bindEvents() {
   });
   // 客户端列表视图：点击行打开详情面板
   $('clientsTable').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) { e.stopPropagation(); openEdit(ed.getAttribute('data-edit')); return; }
+    const rs = e.target.closest('[data-reset]');
+    if (rs) { e.stopPropagation(); resetClientToken(rs.getAttribute('data-reset')); return; }
+    const dl = e.target.closest('[data-del]');
+    if (dl) { e.stopPropagation(); deleteClient(dl.getAttribute('data-del')); return; }
     const row = e.target.closest('tr[data-id]');
     if (row) openDetail(row.getAttribute('data-id'));
   });
@@ -950,7 +979,7 @@ function bindEvents() {
     if (e.target.id === 'detailOverlay' || e.target.closest('#dpBack')) { history.back(); return; }
     const stab = e.target.closest('[data-stab]');
     if (stab) {
-      const root = stab.closest('#settingsModal');
+      const root = stab.closest('#viewSettings');
       const t = stab.getAttribute('data-stab');
       root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('active', b === stab));
       root.querySelectorAll('[data-spane]').forEach(p => { p.style.display = (p.getAttribute('data-spane') === t) ? '' : 'none'; });

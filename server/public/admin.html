@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>自托管监控 · Host Monitor</title>
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
   <style id="customCss"></style>
   <script src="vendor/echarts.min.js"></script>
 </head>
@@ -29,7 +29,7 @@
       <nav class="side-nav">
         <button class="nav-item active" data-view="dashboard">📊 <span>仪表盘</span></button>
         <button class="nav-item" data-view="clients">🖥️ <span>客户端</span></button>
-        <button class="nav-item" id="navSettings">⚙️ <span>设置</span></button>
+        <button class="nav-item" data-view="settings">⚙️ <span>设置</span></button>
         <button class="nav-item" id="navSecurity">🔒 <span>安全</span></button>
       </nav>
       <div class="side-foot">
@@ -79,6 +79,126 @@
             <span class="ch-count" id="clientsCount"></span>
           </div>
           <div class="clients-table" id="clientsTable"></div>
+        </section>
+
+        <!-- 设置视图（由居中弹窗改为左侧导航视图） -->
+        <section class="view view-settings" id="viewSettings" hidden>
+          <div class="settings-wrap">
+            <h2>⚙️ 设置</h2>
+            <div class="tabs" id="settingsTabs">
+              <button class="btn ghost sm active" data-stab="basic">站点信息</button>
+              <button class="btn ghost sm" data-stab="theme">主题外观</button>
+              <button class="btn ghost sm" data-stab="notify">通知渠道</button>
+              <button class="btn ghost sm" data-stab="alert">告警规则</button>
+              <button class="btn ghost sm" data-stab="security">账户安全</button>
+              <button class="btn ghost sm" data-stab="public">公开与首页</button>
+              <button class="btn ghost sm" data-stab="skin">皮肤模板</button>
+            </div>
+
+            <div class="tab-pane" data-spane="basic">
+              <div class="field"><label>站点名称</label><input id="s_site_title" placeholder="如 我的服务器监控" /></div>
+              <div class="field"><label>自定义 CSS（保存后对所有访客生效，可实时预览）</label>
+                <textarea id="s_custom_css" rows="7" placeholder="例如： body{background:#0b0f17} .card{border-radius:16px;box-shadow:none}"></textarea>
+              </div>
+              <div class="field"><label>默认排序</label>
+                <select id="s_default_sort">
+                  <option value="created">创建时间</option>
+                  <option value="name">名称</option>
+                  <option value="status">状态（在线优先）</option>
+                  <option value="cpu">CPU 降序</option>
+                  <option value="mem">内存降序</option>
+                  <option value="group">分组</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>分组显示顺序（用 ↑/↓ 调整；未列出的分组按名称排在后面，「未分组」始终置底）</label>
+                <ul id="groupOrderList" class="group-order"></ul>
+                <div class="row2" style="margin-top:8px">
+                  <div class="field" style="flex:1"><input id="newGroupName" placeholder="新分组名称" /></div>
+                  <button class="btn sm" id="btnAddGroup">添加分组</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane" data-spane="theme" style="display:none">
+              <h4>主题偏好</h4>
+              <div class="theme-opts">
+                <label class="theme-opt"><input type="radio" name="theme" value="auto" /> 跟随系统</label>
+                <label class="theme-opt"><input type="radio" name="theme" value="light" /> 亮色</label>
+                <label class="theme-opt"><input type="radio" name="theme" value="dark" /> 暗色</label>
+              </div>
+              <p class="hint">选择后立即生效并自动记忆；顶部「🌗 主题」按钮可在三者间快速切换。</p>
+            </div>
+
+            <div class="tab-pane" data-spane="notify" style="display:none">
+              <h4>邮件 (SMTP)</h4>
+              <div class="row2">
+                <div class="field"><label>SMTP 主机</label><input id="n_smtp_host" placeholder="smtp.qq.com" /></div>
+                <div class="field"><label>端口</label><input id="n_smtp_port" type="number" /></div>
+              </div>
+              <div class="row2">
+                <div class="field" style="display:flex;align-items:flex-end"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="n_smtp_secure" /> 使用 SSL/TLS</label></div>
+                <div class="field"><label>用户名</label><input id="n_smtp_user" /></div>
+              </div>
+              <div class="row2">
+                <div class="field"><label>密码</label><input id="n_smtp_pass" type="password" placeholder="留空 = 不修改" autocomplete="new-password" /></div>
+                <div class="field"><label>收件人</label><input id="n_alert_to" placeholder="留空则发往用户名" /></div>
+              </div>
+              <div class="field"><label>发件人</label><input id="n_alert_from" placeholder="留空则同用户名" /></div>
+              <h4>Telegram</h4>
+              <div class="row2">
+                <div class="field"><label>Bot Token</label><input id="n_tg_token" type="password" placeholder="留空 = 不修改" autocomplete="new-password" /></div>
+                <div class="field"><label>Chat ID</label><input id="n_tg_chat" /></div>
+              </div>
+              <button class="btn sm" id="btnTestNotify">发送测试告警</button>
+            </div>
+
+            <div class="tab-pane" data-spane="alert" style="display:none">
+              <h4>告警阈值</h4>
+              <div class="row2">
+                <div class="field"><label>CPU 告警阈值 (%)</label><input type="number" id="a_cpu" min="1" max="100" /></div>
+                <div class="field"><label>内存告警阈值 (%)</label><input type="number" id="a_mem" min="1" max="100" /></div>
+              </div>
+              <div class="field"><label>离线判定阈值 (秒，超过该时长未上报即视为离线)</label><input type="number" id="a_offline" min="5" step="5" /></div>
+              <p class="hint">保存后实时生效：前端卡片高亮与后端告警推送（邮件 / Telegram）均按此判定。</p>
+            </div>
+
+            <div class="tab-pane" data-spane="security" style="display:none">
+              <h4>两步验证 (TOTP / 2FA)</h4>
+              <div id="tfaStatus" class="tfa-status">加载中…</div>
+              <div id="tfaSetup" style="display:none;margin:8px 0">
+                <p>请使用 Authenticator 应用手动输入下方密钥（本项目不依赖任何外部二维码服务，符合 CSP 安全策略）：</p>
+                <pre id="tfaSecret" class="token-show"></pre>
+                <div class="field" style="max-width:240px"><input id="tfaCode" inputmode="numeric" placeholder="输入 6 位动态码" /></div>
+                <button class="btn sm" id="tfaEnable">确认启用</button>
+              </div>
+              <button class="btn sm" id="tfaToggle"></button>
+              <p class="hint">启用后每次登录均需动态码，显著降低 Token 泄露风险。</p>
+            </div>
+
+            <div class="tab-pane" data-spane="public" style="display:none">
+              <h4>游客可见（公开状态页）</h4>
+              <label class="switch"><input type="checkbox" id="p_enabled" /> 允许游客（未登录）查看客户端卡片</label>
+              <p class="hint">开启后，访客访问首页 <code>/</code> 即可查看公开状态页（已脱敏，不含备注 / 商家 / 配额等敏感信息）。该开关同时控制公开 API 的可用性。</p>
+              <h4>首页默认布局</h4>
+              <div class="theme-opts">
+                <label class="theme-opt"><input type="radio" name="homelayout" value="grid" /> 卡片式</label>
+                <label class="theme-opt"><input type="radio" name="homelayout" value="list" /> 列表式</label>
+              </div>
+              <p class="hint">公开状态页（首页 /）的默认展示方式；访客也可在页面上临时切换卡片 / 列表。</p>
+            </div>
+
+            <div class="tab-pane" data-spane="skin" style="display:none">
+              <h4>公开状态页模板（第三方皮肤）</h4>
+              <div class="field"><label>选择皮肤</label><select id="p_theme"></select></div>
+              <p class="hint">将带 <code>manifest.json</code> 的第三方皮肤放入 <code>public/themes/&lt;id&gt;/</code> 即可在此选择；默认（built-in）为内置状态页。切换后公开页（首页 /）即使用该皮肤。皮肤须通过免登录的 <code>/api/public/*</code> 拉取数据。</p>
+            </div>
+
+            <div class="actions">
+              <button class="btn ghost" id="btnSettingsBack">返回</button>
+              <button class="btn" id="btnSettingsSave">保存</button>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -203,130 +323,10 @@
       </div>
     </div>
 
-    <!-- Settings modal（重组为 站点 / 主题 / 通知 / 告警规则 / 账户安全 / 公开与首页） -->
-    <div class="modal-bg" id="settingsModal">
-      <div class="modal wide">
-        <h2>⚙️ 设置</h2>
-        <div class="tabs" id="settingsTabs">
-          <button class="btn ghost sm active" data-stab="basic">站点信息</button>
-          <button class="btn ghost sm" data-stab="theme">主题外观</button>
-          <button class="btn ghost sm" data-stab="notify">通知渠道</button>
-          <button class="btn ghost sm" data-stab="alert">告警规则</button>
-          <button class="btn ghost sm" data-stab="security">账户安全</button>
-          <button class="btn ghost sm" data-stab="public">公开与首页</button>
-          <button class="btn ghost sm" data-stab="skin">皮肤模板</button>
-        </div>
-
-        <div class="tab-pane" data-spane="basic">
-          <div class="field"><label>站点名称</label><input id="s_site_title" placeholder="如 我的服务器监控" /></div>
-          <div class="field"><label>自定义 CSS（保存后对所有访客生效，可实时预览）</label>
-            <textarea id="s_custom_css" rows="7" placeholder="例如： body{background:#0b0f17} .card{border-radius:16px;box-shadow:none}"></textarea>
-          </div>
-          <div class="field"><label>默认排序</label>
-            <select id="s_default_sort">
-              <option value="created">创建时间</option>
-              <option value="name">名称</option>
-              <option value="status">状态（在线优先）</option>
-              <option value="cpu">CPU 降序</option>
-              <option value="mem">内存降序</option>
-              <option value="group">分组</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>分组显示顺序（用 ↑/↓ 调整；未列出的分组按名称排在后面，「未分组」始终置底）</label>
-            <ul id="groupOrderList" class="group-order"></ul>
-            <div class="row2" style="margin-top:8px">
-              <div class="field" style="flex:1"><input id="newGroupName" placeholder="新分组名称" /></div>
-              <button class="btn sm" id="btnAddGroup">添加分组</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="tab-pane" data-spane="theme" style="display:none">
-          <h4>主题偏好</h4>
-          <div class="theme-opts">
-            <label class="theme-opt"><input type="radio" name="theme" value="auto" /> 跟随系统</label>
-            <label class="theme-opt"><input type="radio" name="theme" value="light" /> 亮色</label>
-            <label class="theme-opt"><input type="radio" name="theme" value="dark" /> 暗色</label>
-          </div>
-          <p class="hint">选择后立即生效并自动记忆；顶部「🌗 主题」按钮可在三者间快速切换。</p>
-        </div>
-
-        <div class="tab-pane" data-spane="notify" style="display:none">
-          <h4>邮件 (SMTP)</h4>
-          <div class="row2">
-            <div class="field"><label>SMTP 主机</label><input id="n_smtp_host" placeholder="smtp.qq.com" /></div>
-            <div class="field"><label>端口</label><input id="n_smtp_port" type="number" /></div>
-          </div>
-          <div class="row2">
-            <div class="field" style="display:flex;align-items:flex-end"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="n_smtp_secure" /> 使用 SSL/TLS</label></div>
-            <div class="field"><label>用户名</label><input id="n_smtp_user" /></div>
-          </div>
-          <div class="row2">
-            <div class="field"><label>密码</label><input id="n_smtp_pass" type="password" placeholder="留空 = 不修改" autocomplete="new-password" /></div>
-            <div class="field"><label>收件人</label><input id="n_alert_to" placeholder="留空则发往用户名" /></div>
-          </div>
-          <div class="field"><label>发件人</label><input id="n_alert_from" placeholder="留空则同用户名" /></div>
-          <h4>Telegram</h4>
-          <div class="row2">
-            <div class="field"><label>Bot Token</label><input id="n_tg_token" type="password" placeholder="留空 = 不修改" autocomplete="new-password" /></div>
-            <div class="field"><label>Chat ID</label><input id="n_tg_chat" /></div>
-          </div>
-          <button class="btn sm" id="btnTestNotify">发送测试告警</button>
-        </div>
-
-        <div class="tab-pane" data-spane="alert" style="display:none">
-          <h4>告警阈值</h4>
-          <div class="row2">
-            <div class="field"><label>CPU 告警阈值 (%)</label><input type="number" id="a_cpu" min="1" max="100" /></div>
-            <div class="field"><label>内存告警阈值 (%)</label><input type="number" id="a_mem" min="1" max="100" /></div>
-          </div>
-          <div class="field"><label>离线判定阈值 (秒，超过该时长未上报即视为离线)</label><input type="number" id="a_offline" min="5" step="5" /></div>
-          <p class="hint">保存后实时生效：前端卡片高亮与后端告警推送（邮件 / Telegram）均按此判定。</p>
-        </div>
-
-        <div class="tab-pane" data-spane="security" style="display:none">
-          <h4>两步验证 (TOTP / 2FA)</h4>
-          <div id="tfaStatus" class="tfa-status">加载中…</div>
-          <div id="tfaSetup" style="display:none;margin:8px 0">
-            <p>请使用 Authenticator 应用手动输入下方密钥（本项目不依赖任何外部二维码服务，符合 CSP 安全策略）：</p>
-            <pre id="tfaSecret" class="token-show"></pre>
-            <div class="field" style="max-width:240px"><input id="tfaCode" inputmode="numeric" placeholder="输入 6 位动态码" /></div>
-            <button class="btn sm" id="tfaEnable">确认启用</button>
-          </div>
-          <button class="btn sm" id="tfaToggle"></button>
-          <p class="hint">启用后每次登录均需动态码，显著降低 Token 泄露风险。</p>
-        </div>
-
-        <div class="tab-pane" data-spane="public" style="display:none">
-          <h4>游客可见（公开状态页）</h4>
-          <label class="switch"><input type="checkbox" id="p_enabled" /> 允许游客（未登录）查看客户端卡片</label>
-          <p class="hint">开启后，访客访问首页 <code>/</code> 即可查看公开状态页（已脱敏，不含备注 / 商家 / 配额等敏感信息）。该开关同时控制公开 API 的可用性。</p>
-          <h4>首页默认布局</h4>
-          <div class="theme-opts">
-            <label class="theme-opt"><input type="radio" name="homelayout" value="grid" /> 卡片式</label>
-            <label class="theme-opt"><input type="radio" name="homelayout" value="list" /> 列表式</label>
-          </div>
-          <p class="hint">公开状态页（首页 /）的默认展示方式；访客也可在页面上临时切换卡片 / 列表。</p>
-        </div>
-
-        <div class="tab-pane" data-spane="skin" style="display:none">
-          <h4>公开状态页模板（第三方皮肤）</h4>
-          <div class="field"><label>选择皮肤</label><select id="p_theme"></select></div>
-          <p class="hint">将带 <code>manifest.json</code> 的第三方皮肤放入 <code>public/themes/&lt;id&gt;/</code> 即可在此选择；默认（built-in）为内置状态页。切换后公开页（首页 /）即使用该皮肤。皮肤须通过免登录的 <code>/api/public/*</code> 拉取数据。</p>
-        </div>
-
-        <div class="actions">
-          <button class="btn ghost" data-close="settingsModal">取消</button>
-          <button class="btn" id="btnSettingsSave">保存</button>
-        </div>
-      </div>
-    </div>
-
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="flags.js?v=6"></script>
-  <script src="admin.js?v=6"></script>
+  <script src="flags.js?v=7"></script>
+  <script src="admin.js?v=7"></script>
 </body>
 </html>
