@@ -281,6 +281,8 @@ install_server() {
     fi
 
     echo -e "${YELLOW}[信息] 构建并启动服务端（首次需编译 better-sqlite3，约 1-2 分钟）…${NC}"
+    # 先清理本项目旧实例，避免重跑/升级时端口或容器冲突（如 8080 已被占用）
+    docker compose down 2>/dev/null || true
     docker compose up -d --build
 
     echo ""
