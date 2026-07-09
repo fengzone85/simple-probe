@@ -6,12 +6,32 @@ let detailId = null;
 let detailRange = '24h';
 let liveTimer = null;
 const charts = {};
+// 设置中心（站点名 / 自定义 CSS / 默认排序 / 分组顺序）
+let appSettings = { site_title: '', custom_css: '', default_sort: 'created', group_order: [] };
+let currentAgents = [];
 
 // ---------- helpers ----------
+// 进入仪表盘：隐藏登录页、显示应用、加载设置并刷新
+function enterApp() {
+  const lp = $('loginPage'); if (lp) lp.style.display = 'none';
+  const app = $('app'); if (app) app.hidden = false;
+  loadAppSettings();
+  refresh();
+}
+// 显示独立登录页
+function showLoginPage() {
+  const app = $('app'); if (app) app.hidden = true;
+  const lp = $('loginPage'); if (lp) lp.style.display = 'flex';
+  const err = $('loginErr'); if (err) err.textContent = '';
+  if ($('loginToken')) $('loginToken').value = '';
+  if ($('loginTotp')) $('loginTotp').value = '';
+  if ($('loginTotpField')) $('loginTotpField').style.display = totpRequired ? '' : 'none';
+  if ($('loginToken')) $('loginToken').focus();
+}
 async function doLogin() {
-  const token = $('tokenInput').value.trim();
-  const totp = $('totpInput').value.trim();
-  if (!token) { toast('请输入管理员 Token'); return; }
+  const token = $('loginToken').value.trim();
+  const totp = $('loginTotp').value.trim();
+  if (!token) { $('loginErr').textContent = '请输入管理员 Token'; return; }
   try {
     const r = await fetch('/api/login', {
       method: 'POST', credentials: 'same-origin',
@@ -19,21 +39,46 @@ async function doLogin() {
       body: JSON.stringify({ token, totp })
     });
     const j = await r.json().catch(() => ({}));
-    if (r.status !== 200) { toast(j.error || '登录失败'); return; }
+    if (r.status !== 200) {
+      if (j.need_totp) { totpRequired = true; if ($('loginTotpField')) $('loginTotpField').style.display = ''; $('loginErr').textContent = '请输入动态码'; if ($('loginTotp')) $('loginTotp').focus(); return; }
+      $('loginErr').textContent = j.error || '登录失败';
+      return;
+    }
     totpRequired = !!j.totp;
-    $('totpInput').value = '';
-    $('btnLogout').style.display = '';
-    await refresh();
-  } catch (e) { toast('登录失败：' + (e.message || e)); }
+    enterApp();
+  } catch (e) { $('loginErr').textContent = '登录失败：' + (e.message || e); }
 }
 async function doLogout() {
   try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) {}
-  location.reload();
+  showLoginPage();
 }
 function showLogin(need) {
-  if (need) { totpRequired = true; $('totpInput').style.display = ''; }
-  showBanner('请先登录：输入管理员 Token' + (totpRequired ? ' 与动态码' : ''));
-  $('tokenInput').focus();
+  if (need) totpRequired = true;
+  showLoginPage();
+  toast('登录已过期，请重新登录' + (need ? '（需要动态码）' : ''));
+}
+// ---- 设置中心：加载并应用 ----
+async function loadAppSettings() {
+  try {
+    const s = await api('/api/settings');
+    appSettings = Object.assign({ site_title: '', custom_css: '', default_sort: 'created', group_order: [] }, s.ui || {});
+    applyCustomCss();
+    applySiteTitle();
+    if ($('sortSelect')) $('sortSelect').value = appSettings.default_sort || 'created';
+  } catch (e) { /* 未登录或非管理员忽略 */ }
+}
+function applyCustomCss() { const el = $('customCss'); if (el) el.textContent = appSettings.custom_css || ''; }
+function applySiteTitle() {
+  const t = appSettings.site_title || '自托管监控';
+  document.title = t + ' · Host Monitor';
+  if ($('siteTitle')) $('siteTitle').innerHTML = '🛰️ ' + esc(t) + '<span class="dot">.</span>';
+  if ($('loginTitle')) $('loginTitle').textContent = t;
+}
+function populateGroupDatalist() {
+  const dl = $('groupList'); if (!dl) return;
+  const set = new Set();
+  currentAgents.forEach(a => { const g = (a.group || '').trim(); if (g) set.add(g); });
+  dl.innerHTML = Array.from(set).map(g => `<option value="${esc(g)}">`).join('');
 }
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -114,60 +159,96 @@ async function loadOverview() {
 // ---------- grid ----------
 async function loadAgents() {
   const agents = await api('/api/agents');
-  const grid = $('grid');
-  if (!agents.length) { grid.innerHTML = '<div class="empty">暂无客户端，点击右上角「新建客户端」。</div>'; return; }
+  currentAgents = agents;
   // 批量获取所有 Agent 的 sparkline 历史（单次请求，避免 N+1 触发 Nginx 限流 429）
   let histMap = {};
   try { histMap = await api('/api/agents/sparklines?range=6h'); } catch (e) { histMap = {}; }
-  const hist = agents.map(a => histMap[a.id] || []);
-  const html = agents.map((a, i) => {
-    const m = a.latest || {};
-    const d = daysUntil(a.expire_at);
-    let expireBadge = '';
-    if (d != null) {
-      const cls = d < 0 ? 'expire' : (d <= 7 ? 'expire-soon' : '');
-      const txt = d < 0 ? `已过期 ${-d}天` : `剩 ${d} 天`;
-      expireBadge = `<span class="badge ${cls}">${txt}</span>`;
-    }
-    const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
-    const cpuArr = hist[i].map(x => x.cpu);
-    const memArr = hist[i].map(x => x.mem_pct);
-    const rxArr = hist[i].map(x => +(x.net_rx_rate / 1024).toFixed(1));
-    const txArr = hist[i].map(x => +(x.net_tx_rate / 1024).toFixed(1));
-    const loadArr = hist[i].map(x => x.load1);
-    const tempArr = hist[i].map(x => x.temp);
-    const swapArr = hist[i].map(x => x.swap_pct);
-    const probes = parseProbes(m.probes);
-    const probeLabels = Object.keys(probes);
-    const probeSummary = probeLabels.length
-      ? probeLabels.map(l => `${esc(l)} ${probes[l].ok ? (probes[l].ms != null ? probes[l].ms + 'ms' : '✓') : '✕'}`).join(' · ')
-      : '—';
-    const diskPct = m.disk_pct != null ? m.disk_pct : 0;
-    return `<div class="card" data-id="${a.id}">
-      <div class="top">
-        <span class="status ${a.online ? 'on' : ''}"></span>
-        <h3>${esc(a.name)}</h3>${merchant}${expireBadge}
-      </div>
-      <div class="meta">${esc(a.hostname || '')} · ${esc(a.os || '未知系统')}${m.uptime ? ' · 在线 ' + fmtUptime(m.uptime) : ''}</div>
-      ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
-      <div class="metrics">
-        <div class="metric"><div class="lbl"><span>CPU</span><span>${fmtPct(m.cpu)}</span></div>${sparkline(cpuArr, '#36d1c4')}</div>
-        <div class="metric"><div class="lbl"><span>内存</span><span>${fmtPct(m.mem_pct)}</span></div>${sparkline(memArr, '#4f8cff')}</div>
-        <div class="metric"><div class="lbl"><span>负载</span><span>${m.load1 != null ? m.load1.toFixed(2) : '—'}</span></div>${sparkline(loadArr, '#ffc24b')}</div>
-        <div class="metric"><div class="lbl"><span>流量 ↓/↑</span><span>${(m.net_rx_rate/1024||0).toFixed(0)}/${(m.net_tx_rate/1024||0).toFixed(0)} KB/s</span></div>${sparkline(rxArr, '#3ad07a')}</div>
-        <div class="metric"><div class="lbl"><span>温度</span><span>${m.temp != null ? m.temp.toFixed(1) + '°C' : '—'}</span></div>${sparkline(tempArr, '#ff7a59')}</div>
-        <div class="metric"><div class="lbl"><span>Swap</span><span>${fmtPct(m.swap_pct)}</span></div>${sparkline(swapArr, '#a06bff')}</div>
-        <div class="metric"><div class="lbl"><span>网络</span><span>${probeSummary}</span></div></div>
-      </div>
-      <div class="metric disk"><div class="lbl"><span>硬盘</span><span>${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span></div>
-        <div class="bar"><i data-pct="${diskPct}"></i></div></div>
-      <div class="foot">
-        <button class="btn ghost sm" data-edit="${a.id}">编辑</button>
-      </div>
-    </div>`;
+  renderGrid(agents, histMap);
+  populateGroupDatalist();
+}
+function sortAgents(list) {
+  const by = appSettings.default_sort || 'created';
+  const arr = list.slice();
+  if (by === 'name') arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  else if (by === 'status') arr.sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+  else if (by === 'cpu') arr.sort((a, b) => (b.latest && b.latest.cpu || 0) - (a.latest && a.latest.cpu || 0));
+  else if (by === 'mem') arr.sort((a, b) => (b.latest && b.latest.mem_pct || 0) - (a.latest && a.latest.mem_pct || 0));
+  else arr.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  return arr;
+}
+function renderGrid(agents, histMap) {
+  const grid = $('grid');
+  if (!agents || !agents.length) { grid.innerHTML = '<div class="empty">暂无客户端，点击右上角「新建客户端」。</div>'; return; }
+  const sorted = sortAgents(agents);
+  // 按 group 分组
+  const groups = {};
+  for (const a of sorted) {
+    const g = (a.group || '').trim() || '未分组';
+    (groups[g] || (groups[g] = [])).push(a);
+  }
+  // 分组显示顺序：设置中的 group_order 优先，其余按名称，未分组置底
+  const order = appSettings.group_order || [];
+  const keys = Object.keys(groups);
+  const ordered = [];
+  for (const g of order) if (groups[g]) ordered.push(g);
+  for (const g of keys.filter(k => !order.includes(k)).sort((a, b) => a.localeCompare(b))) if (g !== '未分组') ordered.push(g);
+  if (groups['未分组']) ordered.push('未分组');
+
+  const html = ordered.map(g => {
+    const cards = groups[g].map(a => cardHtml(a, histMap[a.id] || [])).join('');
+    return `<section class="group-section">
+      <h3 class="group-title">${esc(g)} <span class="group-count">${groups[g].length}</span></h3>
+      <div class="cards">${cards}</div>
+    </section>`;
   }).join('');
   grid.innerHTML = html;
   grid.querySelectorAll('.bar > i').forEach((el) => { el.style.width = (el.dataset.pct || 0) + '%'; });
+}
+function cardHtml(a, hist) {
+  const m = a.latest || {};
+  const d = daysUntil(a.expire_at);
+  let expireBadge = '';
+  if (d != null) {
+    const cls = d < 0 ? 'expire' : (d <= 7 ? 'expire-soon' : '');
+    const txt = d < 0 ? `已过期 ${-d}天` : `剩 ${d} 天`;
+    expireBadge = `<span class="badge ${cls}">${txt}</span>`;
+  }
+  const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
+  const cpuArr = hist.map(x => x.cpu);
+  const memArr = hist.map(x => x.mem_pct);
+  const rxArr = hist.map(x => +(x.net_rx_rate / 1024).toFixed(1));
+  const txArr = hist.map(x => +(x.net_tx_rate / 1024).toFixed(1));
+  const loadArr = hist.map(x => x.load1);
+  const tempArr = hist.map(x => x.temp);
+  const swapArr = hist.map(x => x.swap_pct);
+  const probes = parseProbes(m.probes);
+  const probeLabels = Object.keys(probes);
+  const probeSummary = probeLabels.length
+    ? probeLabels.map(l => `${esc(l)} ${probes[l].ok ? (probes[l].ms != null ? probes[l].ms + 'ms' : '✓') : '✕'}`).join(' · ')
+    : '—';
+  const diskPct = m.disk_pct != null ? m.disk_pct : 0;
+  return `<div class="card" data-id="${a.id}">
+    <div class="top">
+      <span class="status ${a.online ? 'on' : ''}"></span>
+      <h3>${esc(a.name)}</h3>${merchant}${expireBadge}
+    </div>
+    <div class="meta">${esc(a.hostname || '')} · ${esc(a.os || '未知系统')}${m.uptime ? ' · 在线 ' + fmtUptime(m.uptime) : ''}</div>
+    ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
+    <div class="metrics">
+      <div class="metric"><div class="lbl"><span>CPU</span><span>${fmtPct(m.cpu)}</span></div>${sparkline(cpuArr, '#36d1c4')}</div>
+      <div class="metric"><div class="lbl"><span>内存</span><span>${fmtPct(m.mem_pct)}</span></div>${sparkline(memArr, '#4f8cff')}</div>
+      <div class="metric"><div class="lbl"><span>负载</span><span>${m.load1 != null ? m.load1.toFixed(2) : '—'}</span></div>${sparkline(loadArr, '#ffc24b')}</div>
+      <div class="metric"><div class="lbl"><span>流量 ↓/↑</span><span>${(m.net_rx_rate/1024||0).toFixed(0)}/${(m.net_tx_rate/1024||0).toFixed(0)} KB/s</span></div>${sparkline(rxArr, '#3ad07a')}</div>
+      <div class="metric"><div class="lbl"><span>温度</span><span>${m.temp != null ? m.temp.toFixed(1) + '°C' : '—'}</span></div>${sparkline(tempArr, '#ff7a59')}</div>
+      <div class="metric"><div class="lbl"><span>Swap</span><span>${fmtPct(m.swap_pct)}</span></div>${sparkline(swapArr, '#a06bff')}</div>
+      <div class="metric"><div class="lbl"><span>网络</span><span>${probeSummary}</span></div></div>
+    </div>
+    <div class="metric disk"><div class="lbl"><span>硬盘</span><span>${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span></div>
+      <div class="bar"><i data-pct="${diskPct}"></i></div></div>
+    <div class="foot">
+      <button class="btn ghost sm" data-edit="${a.id}">编辑</button>
+    </div>
+  </div>`;
 }
 function fmtUptime(s) {
   s = Number(s) || 0;
@@ -330,6 +411,7 @@ async function submitCreate() {
       body: JSON.stringify({
         name: $('c_name').value.trim(), merchant: $('c_merchant').value.trim(),
         expire_at: $('c_expire').value, monthly_quota_gb: Number($('c_quota').value) || 0,
+        group: $('c_group').value.trim(),
         note: $('c_note').value.trim()
       })
     });
@@ -349,6 +431,7 @@ async function openEdit(id) {
   if (!a) return;
   $('e_id').value = a.id; $('e_name').value = a.name; $('e_merchant').value = a.merchant || '';
   $('e_expire').value = (a.expire_at || '').slice(0, 10); $('e_quota').value = a.monthly_quota_gb || 0;
+  $('e_group').value = a.group || '';
   $('e_note').value = a.note || '';
   $('editResult').innerHTML = '';
   openModal('editModal');
@@ -360,6 +443,7 @@ async function submitEdit() {
       body: JSON.stringify({
         name: $('e_name').value.trim(), merchant: $('e_merchant').value.trim(),
         expire_at: $('e_expire').value, monthly_quota_gb: Number($('e_quota').value) || 0,
+        group: $('e_group').value.trim(),
         note: $('e_note').value.trim()
       })
     });
@@ -387,6 +471,98 @@ async function resetToken() {
   } catch (e) { toast('重置失败：' + e.message); }
 }
 
+// ---------- 设置中心 ----------
+async function openSettings() {
+  try {
+    const s = await api('/api/settings');
+    appSettings = Object.assign({ site_title: '', custom_css: '', default_sort: 'created', group_order: [] }, s.ui || {});
+    const n = s.notify || {};
+    $('s_site_title').value = appSettings.site_title || '';
+    $('s_custom_css').value = appSettings.custom_css || '';
+    $('s_default_sort').value = appSettings.default_sort || 'created';
+    $('n_smtp_host').value = n.smtp_host || '';
+    $('n_smtp_port').value = n.smtp_port || '';
+    $('n_smtp_secure').checked = !!n.smtp_secure;
+    $('n_smtp_user').value = n.smtp_user || '';
+    $('n_smtp_pass').value = '';
+    $('n_alert_from').value = n.alert_from || '';
+    $('n_alert_to').value = n.alert_to || '';
+    $('n_tg_token').value = '';
+    $('n_tg_chat').value = n.telegram_chat_id || '';
+    renderGroupOrder();
+    openModal('settingsModal');
+  } catch (e) { toast('加载设置失败：' + e.message); }
+}
+function renderGroupOrder() {
+  const list = appSettings.group_order || [];
+  const ul = $('groupOrderList');
+  if (!ul) return;
+  ul.innerHTML = list.length
+    ? list.map((g, i) => `<li><span class="go-name">${esc(g)}</span>
+        <span class="go-actions">
+          <button class="btn ghost sm" data-go="up" data-i="${i}">↑</button>
+          <button class="btn ghost sm" data-go="down" data-i="${i}">↓</button>
+          <button class="btn ghost sm" data-go="del" data-i="${i}">✕</button>
+        </span></li>`).join('')
+    : '<li class="empty">（暂无分组顺序，添加后监控页将按此顺序分组展示）</li>';
+}
+function moveGroup(i, act) {
+  const list = appSettings.group_order || [];
+  if (act === 'del') list.splice(i, 1);
+  else if (act === 'up' && i > 0) { const t = list[i-1]; list[i-1] = list[i]; list[i] = t; }
+  else if (act === 'down' && i < list.length - 1) { const t = list[i+1]; list[i+1] = list[i]; list[i] = t; }
+  else return;
+  appSettings.group_order = list;
+  renderGroupOrder();
+}
+function addGroup() {
+  const v = ($('newGroupName').value || '').trim();
+  if (!v) return;
+  appSettings.group_order = appSettings.group_order || [];
+  if (!appSettings.group_order.includes(v)) appSettings.group_order.push(v);
+  $('newGroupName').value = '';
+  renderGroupOrder();
+}
+async function saveSettings() {
+  const ui = {
+    site_title: $('s_site_title').value.trim(),
+    custom_css: $('s_custom_css').value,
+    default_sort: $('s_default_sort').value,
+    group_order: appSettings.group_order || []
+  };
+  const notify = {
+    smtp_host: $('n_smtp_host').value.trim(),
+    smtp_port: Number($('n_smtp_port').value) || 465,
+    smtp_secure: $('n_smtp_secure').checked,
+    smtp_user: $('n_smtp_user').value.trim(),
+    smtp_pass: $('n_smtp_pass').value,
+    alert_from: $('n_alert_from').value.trim(),
+    alert_to: $('n_alert_to').value.trim(),
+    telegram_bot_token: $('n_tg_token').value,
+    telegram_chat_id: $('n_tg_chat').value.trim()
+  };
+  try {
+    await api('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ui, notify }) });
+    appSettings = Object.assign(appSettings, ui);
+    applyCustomCss(); applySiteTitle();
+    if ($('sortSelect')) $('sortSelect').value = ui.default_sort;
+    closeModal('settingsModal');
+    toast('设置已保存');
+    refresh();
+  } catch (e) { toast('保存失败：' + e.message); }
+}
+async function testNotify() {
+  try {
+    const r = await api('/api/test-alert', { method: 'POST' });
+    toast(r.message || '测试告警已发送');
+  } catch (e) { toast('发送失败：' + e.message); }
+}
+async function onSortChange() {
+  appSettings.default_sort = $('sortSelect').value;
+  try { await api('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ui: { default_sort: appSettings.default_sort } }) }); } catch (_) {}
+  loadAgents();
+}
+
 // ---------- live traffic (安全增强：仅前端轮询既有 /api/agents/:id，不新增指令通道) ----------
 function updateLiveTraffic(m) {
   if (!m) return;
@@ -409,16 +585,23 @@ function stopLiveTraffic() {
 // ---------- refresh loop ----------
 // ---------- event bindings (替代内联 onclick，以适配严格的 CSP) ----------
 function bindEvents() {
-  $('btnLogin').addEventListener('click', doLogin);
+  $('btnLoginSubmit').addEventListener('click', doLogin);
+  $('loginToken').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+  $('loginTotp').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('btnLogout').addEventListener('click', doLogout);
   $('btnTestAlert').addEventListener('click', sendTestAlert);
   $('btnSecurity').addEventListener('click', async () => { await load2FAStatus(); openModal('securityModal'); });
+  $('btnSettings').addEventListener('click', openSettings);
   $('tfaToggle').addEventListener('click', start2FASetup);
   $('btnNew').addEventListener('click', openCreate);
   $('btnCreateSubmit').addEventListener('click', submitCreate);
   $('btnEditSubmit').addEventListener('click', submitEdit);
   $('btnDelete').addEventListener('click', submitDelete);
   $('btnResetToken').addEventListener('click', resetToken);
+  $('btnSettingsSave').addEventListener('click', saveSettings);
+  $('btnTestNotify').addEventListener('click', testNotify);
+  $('btnAddGroup').addEventListener('click', addGroup);
+  $('sortSelect').addEventListener('change', onSortChange);
   $('rangeBar').addEventListener('click', (e) => {
     const b = e.target.closest('[data-r]');
     if (b) setRange(b.getAttribute('data-r'), b);
@@ -435,6 +618,19 @@ function bindEvents() {
       const cid = closeEl.getAttribute('data-close');
       closeModal(cid);
       if (cid === 'detailModal') stopLiveTraffic();
+      return;
+    }
+    const stab = e.target.closest('[data-stab]');
+    if (stab) {
+      const root = stab.closest('#settingsModal');
+      const t = stab.getAttribute('data-stab');
+      root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('active', b === stab));
+      root.querySelectorAll('[data-spane]').forEach(p => { p.style.display = (p.getAttribute('data-spane') === t) ? '' : 'none'; });
+      return;
+    }
+    const go = e.target.closest('[data-go]');
+    if (go) {
+      moveGroup(Number(go.getAttribute('data-i')), go.getAttribute('data-go'));
       return;
     }
     const tab = e.target.closest('[data-tab]');
@@ -467,11 +663,12 @@ initLoad();
 
 async function initLoad() {
   try {
-    const st = await fetch('/api/admin/2fa/status', { credentials: 'same-origin' }).then(r => r.json());
+    const r = await fetch('/api/admin/2fa/status', { credentials: 'same-origin' });
+    if (r.status === 401) { showLoginPage(); return; }
+    const st = await r.json();
     totpRequired = !!st.enabled;
-    $('totpInput').style.display = totpRequired ? '' : 'none';
-  } catch (e) {}
-  refresh();
+    enterApp();
+  } catch (e) { showLoginPage(); }
 }
 setInterval(() => { if (detailId && $('detailModal').classList.contains('show')) loadDetail(); else refresh(); }, 10000);
 window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));

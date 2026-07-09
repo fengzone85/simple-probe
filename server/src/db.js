@@ -81,6 +81,12 @@ CREATE TABLE IF NOT EXISTS admin_config (
   }
 }
 
+// schema migration: agents 增加分组字段（避免使用 SQL 关键字 group，列名用 grp）
+{
+  const existing = new Set(db.prepare('PRAGMA table_info(agents)').all().map((r) => r.name));
+  if (!existing.has('grp')) db.exec("ALTER TABLE agents ADD COLUMN grp TEXT DEFAULT ''");
+}
+
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const genToken = () => crypto.randomBytes(24).toString('hex');
 const genId = () => 'agt_' + crypto.randomBytes(6).toString('hex');
@@ -89,10 +95,10 @@ const stmts = {
   getAgent: db.prepare('SELECT * FROM agents WHERE id = ?'),
   getAgents: db.prepare('SELECT * FROM agents ORDER BY created_at DESC'),
   insertAgent: db.prepare(`INSERT INTO agents
-    (id, name, token_hash, merchant, note, expire_at, monthly_quota_gb, created_at, last_seen)
-    VALUES (@id, @name, @token_hash, @merchant, @note, @expire_at, @monthly_quota_gb, @created_at, 0)`),
+    (id, name, token_hash, merchant, note, expire_at, monthly_quota_gb, grp, created_at, last_seen)
+    VALUES (@id, @name, @token_hash, @merchant, @note, @expire_at, @monthly_quota_gb, @grp, @created_at, 0)`),
   updateAgent: db.prepare(`UPDATE agents SET
-    name=@name, merchant=@merchant, note=@note, expire_at=@expire_at, monthly_quota_gb=@monthly_quota_gb
+    name=@name, merchant=@merchant, note=@note, expire_at=@expire_at, monthly_quota_gb=@monthly_quota_gb, grp=@grp
     WHERE id=@id`),
   deleteAgent: db.prepare('DELETE FROM agents WHERE id = ?'),
   touch: db.prepare('UPDATE agents SET last_seen=?, os=?, hostname=? WHERE id=?'),
@@ -125,6 +131,7 @@ const createAgent = (fields) => {
     note: fields.note || '',
     expire_at: fields.expire_at || '',
     monthly_quota_gb: Number(fields.monthly_quota_gb) || 0,
+    grp: fields.grp || '',
     created_at: Date.now()
   });
   return { id, token };
@@ -150,7 +157,8 @@ const updateAgent = (id, f) => stmts.updateAgent.run({
   merchant: f.merchant || '',
   note: f.note || '',
   expire_at: f.expire_at || '',
-  monthly_quota_gb: Number(f.monthly_quota_gb) || 0
+  monthly_quota_gb: Number(f.monthly_quota_gb) || 0,
+  grp: f.grp || ''
 });
 
 const deleteAgent = (id) => {
@@ -187,10 +195,47 @@ const is2FAEnabled = () => getConfig(TWOFA_ENABLED) === '1';
 const set2FASecret = (s) => setConfig(TWOFA_SECRET, s);
 const set2FAEnabled = (b) => setConfig(TWOFA_ENABLED, b ? '1' : '0');
 
+// ---- UI / 通知设置（持久化到 admin_config 的 key-value）----
+const SETTINGS_KEY = 'ui_settings';
+const NOTIFY_KEY = 'notify_config';
+function getUiSettings() {
+  const def = { site_title: '', custom_css: '', default_sort: 'created', group_order: [] };
+  try { const o = JSON.parse(getConfig(SETTINGS_KEY) || '{}'); return Object.assign(def, o); }
+  catch (e) { return def; }
+}
+function setUiSettings(o) { setConfig(SETTINGS_KEY, JSON.stringify(o || {})); }
+function getNotifyConfigRaw() {
+  try { return JSON.parse(getConfig(NOTIFY_KEY) || '{}'); } catch (e) { return {}; }
+}
+// 通知配置：UI 保存值优先，缺失项回退到 docker-compose 环境变量默认值。
+function getNotifyConfig() {
+  const def = {
+    smtp_host: process.env.SMTP_HOST || 'smtp.qq.com',
+    smtp_port: Number(process.env.SMTP_PORT || 465),
+    smtp_secure: process.env.SMTP_SECURE !== 'false',
+    smtp_user: process.env.SMTP_USER || '',
+    smtp_pass: process.env.SMTP_PASS || '',
+    alert_from: process.env.ALERT_FROM || process.env.SMTP_USER || '',
+    alert_to: process.env.ALERT_TO || process.env.SMTP_USER || '',
+    telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '',
+    telegram_chat_id: process.env.TELEGRAM_CHAT_ID || ''
+  };
+  return Object.assign(def, getNotifyConfigRaw());
+}
+function setNotifyConfig(incoming) {
+  const cur = getNotifyConfigRaw();
+  const merged = Object.assign({}, cur, incoming || {});
+  // 密码类字段留空表示「保持不变」，避免保存时空字符串误清空已存凭据
+  if (incoming && incoming.smtp_pass === '' && cur.smtp_pass) merged.smtp_pass = cur.smtp_pass;
+  if (incoming && incoming.telegram_bot_token === '' && cur.telegram_bot_token) merged.telegram_bot_token = cur.telegram_bot_token;
+  setConfig(NOTIFY_KEY, JSON.stringify(merged));
+}
+
 module.exports = {
   db, hashToken, genToken,
   createAgent, getAgent, getAgents, updateAgent, deleteAgent, resetAgentToken,
   touchAgent, insertMetric, getLatestMetric, getMetrics, getMetricsAll,
   prune, getAlertState, setAlertState, clearAlertState,
-  getConfig, setConfig, get2FASecret, is2FAEnabled, set2FASecret, set2FAEnabled
+  getConfig, setConfig, get2FASecret, is2FAEnabled, set2FASecret, set2FAEnabled,
+  getUiSettings, setUiSettings, getNotifyConfig, setNotifyConfig
 };

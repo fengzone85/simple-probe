@@ -2,40 +2,37 @@ const https = require('https');
 const nodemailer = require('nodemailer');
 const db = require('./db');
 
-let transporter = null;
-let telegramEnabled = false;
-
-function initMail() {
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.qq.com',
-      port: Number(process.env.SMTP_PORT || 465),
-      secure: process.env.SMTP_SECURE !== 'false',
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-    });
-    console.log('[alerts] mail transport ready');
-  } else {
-    console.log('[alerts] SMTP not configured, alerts disabled');
-  }
-}
-
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 邮件通道：从「设置中心 / 环境变量」读取，每次发送时动态构建（使 UI 改动即时生效，无需重启）。
+function mailTransport() {
+  const c = db.getNotifyConfig();
+  if (!c.smtp_user || !c.smtp_pass) return null;
+  return nodemailer.createTransport({
+    host: c.smtp_host || 'smtp.qq.com',
+    port: Number(c.smtp_port || 465),
+    secure: c.smtp_secure !== false,
+    auth: { user: c.smtp_user, pass: c.smtp_pass }
+  });
 }
 
 // 通过 Telegram Bot API 发送消息。返回 Promise，但任何错误都在内部吞掉，
 // 绝不让电报故障影响邮件通道或告警主流程。
 function sendTelegram(text) {
   return new Promise((resolve) => {
+    const c = db.getNotifyConfig();
+    if (!c.telegram_bot_token || !c.telegram_chat_id) return resolve();
     const payload = JSON.stringify({
-      chat_id: process.env.TELEGRAM_CHAT_ID,
+      chat_id: c.telegram_chat_id,
       text,
       parse_mode: 'HTML',
       disable_web_page_preview: true
     });
     const req = https.request({
       hostname: 'api.telegram.org',
-      path: `/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      path: `/bot${c.telegram_bot_token}/sendMessage`,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -43,7 +40,7 @@ function sendTelegram(text) {
       }
     }, (res) => {
       let body = '';
-      res.on('data', (c) => { body += c; });
+      res.on('data', (c2) => { body += c2; });
       res.on('end', () => {
         if (res.statusCode !== 200) console.error('[alerts] telegram http', res.statusCode, body);
         resolve();
@@ -56,12 +53,14 @@ function sendTelegram(text) {
 }
 
 async function sendAlert(subject, text) {
+  const c = db.getNotifyConfig();
   // 通道一：邮件
+  const transporter = mailTransport();
   if (transporter) {
     try {
       await transporter.sendMail({
-        from: process.env.ALERT_FROM || process.env.SMTP_USER,
-        to: process.env.ALERT_TO || process.env.SMTP_USER,
+        from: c.alert_from || c.smtp_user,
+        to: c.alert_to || c.smtp_user,
         subject,
         text
       });
@@ -71,7 +70,7 @@ async function sendAlert(subject, text) {
     }
   }
   // 通道二：Telegram（HTML 转义，防止标题/正文里的特殊字符破坏解析）
-  if (telegramEnabled) {
+  if (c.telegram_bot_token && c.telegram_chat_id) {
     try {
       await sendTelegram(`<b>${escapeHtml(subject)}</b>\n\n${escapeHtml(text)}`);
       console.log('[alerts] telegram sent:', subject);
@@ -121,27 +120,16 @@ async function check() {
   }
 }
 
-function initTelegram() {
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-    telegramEnabled = true;
-    console.log('[alerts] telegram ready');
-  } else {
-    console.log('[alerts] TELEGRAM not configured, telegram alerts disabled');
-  }
-}
-
-function init() {
-  initMail();
-  initTelegram();
-}
-
 function notifyStatus() {
-  return { mail: !!transporter, telegram: telegramEnabled };
+  const c = db.getNotifyConfig();
+  return {
+    mail: !!(c.smtp_user && c.smtp_pass),
+    telegram: !!(c.telegram_bot_token && c.telegram_chat_id)
+  };
 }
 
 let timer = null;
 function start() {
-  init();
   const interval = Math.max(10000, (Number(process.env.OFFLINE_THRESHOLD_SEC || 60) * 1000) / 2);
   timer = setInterval(check, interval);
   console.log('[alerts] checker started');
@@ -149,4 +137,4 @@ function start() {
 
 function stop() { if (timer) clearInterval(timer); }
 
-module.exports = { start, stop, sendAlert, init, notifyStatus };
+module.exports = { start, stop, sendAlert, notifyStatus };

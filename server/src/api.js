@@ -102,7 +102,7 @@ router.get('/agents', adminOrReadonly, (req, res) => {
   const list = db.getAgents().map((a) => {
     const latest = db.getLatestMetric(a.id);
     const online = a.last_seen && (now - a.last_seen) < offlineSec * 1000;
-    return Object.assign({}, a, { online: !!online, latest: latest || null });
+    return Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null });
   });
   res.json(list);
 });
@@ -123,7 +123,7 @@ router.get('/agents/:id', adminOrReadonly, (req, res) => {
   const latest = db.getLatestMetric(a.id);
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
   const online = a.last_seen && (Date.now() - a.last_seen) < offlineSec * 1000;
-  res.json(Object.assign({}, a, { online: !!online, latest: latest || null }));
+  res.json(Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null }));
 });
 
 // ---- Admin: metrics time-series ----
@@ -163,7 +163,8 @@ router.post('/agents', adminOnly, (req, res) => {
     merchant: str(req.body.merchant, 100),
     note: str(req.body.note, 500),
     expire_at: str(req.body.expire_at, 40),
-    monthly_quota_gb: req.body.monthly_quota_gb
+    monthly_quota_gb: req.body.monthly_quota_gb,
+    grp: str(req.body.group, 60)
   });
   // 创建时一次性把「地址 + 该客户端令牌」预填进两条一键命令返回（令牌仅此刻明文可用）。
   const install = buildInstallCommands(getPublicBaseUrl(req), id, token, AGENT_INTERVAL_DEFAULT);
@@ -179,7 +180,8 @@ router.put('/agents/:id', adminOnly, (req, res) => {
     merchant: str(req.body.merchant, 100),
     note: str(req.body.note, 500),
     expire_at: str(req.body.expire_at, 40),
-    monthly_quota_gb: req.body.monthly_quota_gb
+    monthly_quota_gb: req.body.monthly_quota_gb,
+    grp: str(req.body.group, 60)
   });
   res.json({ ok: true });
 });
@@ -198,6 +200,23 @@ router.post('/agents/:id/reset-token', adminOnly, (req, res) => {
   const install = buildInstallCommands(getPublicBaseUrl(req), req.params.id, token, AGENT_INTERVAL_DEFAULT);
   res.json({ ok: true, token, install });
 });
+
+// ---- Admin: UI + 通知设置（持久化到 admin_config）----
+// GET 返回当前设置；密码类字段脱敏（留空表示「保持不变」）。
+router.get('/settings', adminOrReadonly, (req, res) => {
+  const notify = db.getNotifyConfig();
+  const safe = Object.assign({}, notify);
+  if (safe.smtp_pass) safe.smtp_pass = '';
+  if (safe.telegram_bot_token) safe.telegram_bot_token = '';
+  res.json({ ui: db.getUiSettings(), notify: safe });
+});
+router.put('/settings', adminOnly, (req, res) => {
+  const b = req.body || {};
+  if (b.ui && typeof b.ui === 'object') db.setUiSettings(b.ui);
+  if (b.notify && typeof b.notify === 'object') db.setNotifyConfig(b.notify);
+  res.json({ ok: true });
+});
+
 
 // ---- Admin: send a test alert to verify notify channels (email / Telegram) ----
 router.post('/test-alert', adminOnly, async (req, res) => {
