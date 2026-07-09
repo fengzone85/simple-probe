@@ -91,8 +91,34 @@ app.use('/api', api);
 // 若 ui_settings.public_theme 指向 public/themes/<id> 下的皮肤，则投放该皮肤首页；
 // 否则回退到内置默认 public/index.html。主题目录名经白名单校验，杜绝路径穿越。
 const THEMES_DIR = path.join(__dirname, 'public', 'themes');
+const THEME_MIME = {
+  '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.ico': 'image/x-icon', '.webp': 'image/webp', '.woff2': 'font/woff2'
+};
+
+// 第三方皮肤资源：用显式路由投放，不依赖 express.static 对 themes 目录的覆盖，
+// 规避前置 Nginx / Docker 部署时静态目录未被代理 / 未打进镜像导致的 404。
+// 主题目录名与文件名均经白名单校验，杜绝路径穿越。
+app.get('/themes/:id/:file', (req, res) => {
+  const { id, file } = req.params;
+  if (!/^[A-Za-z0-9_-]+$/.test(id) || !/^[A-Za-z0-9_.\-]+$/.test(file) || file.includes('..')) {
+    return res.status(400).end();
+  }
+  const fp = path.join(THEMES_DIR, id, file);
+  if (!fp.startsWith(THEMES_DIR + path.sep) || !fs.existsSync(fp) || !fs.statSync(fp).isFile()) {
+    return res.status(404).end();
+  }
+  const ext = path.extname(fp).toLowerCase();
+  res.setHeader('Content-Type', THEME_MIME[ext] || 'application/octet-stream');
+  fs.createReadStream(fp).pipe(res);
+});
+
 app.get('/', (req, res, next) => {
-  const theme = (db.getUiSettings().public_theme || 'default');
+  // 支持 ?theme=<id> 预览（无需改动设置，便于调试第三方皮肤）；否则用后台设置的 public_theme。
+  const ui = db.getUiSettings();
+  const theme = (req.query.theme && typeof req.query.theme === 'string') ? req.query.theme : (ui.public_theme || 'default');
   if (theme && theme !== 'default' && /^[A-Za-z0-9_-]+$/.test(theme)) {
     const fp = path.join(THEMES_DIR, theme, 'index.html');
     if (fs.existsSync(fp)) return res.sendFile(fp);
