@@ -18,7 +18,7 @@
 
 ## 原生 systemd 部署（推荐，零依赖）
 
-> 目标机只需 Python 3（绝大多数 Linux 内置），无需 Docker。
+> 目标机只需 Python 3.8+（绝大多数 Linux 内置），无需 Docker。安装脚本会自动探测并校验版本。
 
 ### 一键安装
 
@@ -34,9 +34,20 @@ sudo bash install.sh \
     --token   your-agent-token \
     --interval 15
 
-# 交互式安装
+# 更安全的非交互安装：token 从文件读取，避免明文出现在 ps / shell 历史（推荐）
+echo 'your-agent-token' > /root/agent-token.txt
+sudo bash install.sh \
+    --server  http://your-server:8008 \
+    --id      your-node-id \
+    --token-file /root/agent-token.txt \
+    --interval 15
+# 也可通过环境变量传入：sudo SIMPP_TOKEN=your-agent-token bash install.sh --server ... --id ...
+
+# 交互式安装（token 输入不回显）
 sudo bash install.sh
 ```
+
+> **Token 传递安全建议**：`--token` 会明文出现在 `ps aux` 与 shell 历史中，建议批量部署改用 `--token-file <文件>` 或 `SIMPP_TOKEN` 环境变量。三者优先级：`--token` > `--token-file` > `SIMPP_TOKEN`。
 
 ### systemd 管理
 

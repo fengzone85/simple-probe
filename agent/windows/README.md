@@ -124,8 +124,14 @@ sudo bash install.sh \
     --interval 15
 ```
 
+> **Token 传递安全建议**：`--token` 会明文出现在 `ps aux` 与 shell 历史中，建议批量部署改用
+> `--token-file <文件>`（`echo 'TOKEN' > /root/agent-token.txt` 后传 `--token-file /root/agent-token.txt`），
+> 或通过环境变量 `SIMPP_TOKEN=TOKEN sudo bash install.sh --server ... --id ...` 传入。
+> 三者优先级：`--token` > `--token-file` > `SIMPP_TOKEN`。
+
 > **安全提示**：`install.sh` 本身不做任何网络下载，只读取本地同目录下的 `agent.py` / `collector.py` 文件。
 > 建议将仓库克隆到机器后运行，而非 `curl | bash` 自动下载。
+> 目标机需 Python 3.8+，安装脚本会自动探测并校验版本。
 
 ### 一键安装（交互式）
 
