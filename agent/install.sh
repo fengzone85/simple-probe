@@ -25,7 +25,8 @@ Install Simple Probe Agent as a systemd service.
 Required (interactive if not given):
   --server SERVER_URL   Monitoring server address  (e.g. https://your-server:8008)
   --id     AGENT_ID     Agent/Node identifier
-  --token  AGENT_TOKEN  Authentication token
+  --token  AGENT_TOKEN  Authentication token (visible in process list — prefer --token-file)
+  --token-file FILE     Read token from FILE (recommended; avoids leaking via ps/shell history)
   --interval SECONDS    Report interval in seconds (default: 15)
 
 Examples:
@@ -50,6 +51,8 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             INTERVAL="$2"; shift 2 ;;
+        --token-file)
+            AGENT_TOKEN_FILE="$2"; shift 2 ;;
         --help|-h) usage ;;
         *)
             echo -e "${RED}[错误] 未知参数: $1${NC}" >&2
@@ -90,11 +93,30 @@ fi
 
 echo -e "${GREEN}[OK]   Python: $("$PYTHON" --version 2>&1)${NC}"
 
+# 版本下限校验（agent 使用 3.8+ 语法/特性）
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info>=(3,8) else 1)' 2>/dev/null; then
+    echo -e "${RED}[错误] Python 版本过低，需 >= 3.8，当前: $("$PYTHON" --version 2>&1)${NC}" >&2
+    exit 1
+fi
+
 # ── 3. Detect ping (optional, warn if missing) ─────────────────────────────────
 if ! command -v ping >/dev/null 2>&1; then
     echo -e ""
     echo -e "${YELLOW}[提示] 未检测到 ping 命令，网络质量探测将使用 TCP fallback（功能不受影响）${NC}"
     echo -e "${YELLOW}[提示] 如需完整 ICMP 探测，请运行: apt-get install -y iputils-ping${NC}"
+fi
+
+# ── 3b. Resolve AGENT_TOKEN from file / env (if not passed via --token) ──────
+if [[ -z "${AGENT_TOKEN:-}" && -n "${AGENT_TOKEN_FILE:-}" ]]; then
+    if [[ -f "$AGENT_TOKEN_FILE" ]]; then
+        AGENT_TOKEN="$(tr -d '[:space:]' < "$AGENT_TOKEN_FILE")"
+    else
+        echo -e "${RED}[错误] --token-file 指定的文件不存在: $AGENT_TOKEN_FILE${NC}" >&2
+        exit 1
+    fi
+fi
+if [[ -z "${AGENT_TOKEN:-}" && -n "${SIMPP_TOKEN:-}" ]]; then
+    AGENT_TOKEN="$SIMPP_TOKEN"
 fi
 
 # ── 4. Interactive config collection ─────────────────────────────────────────
@@ -198,6 +220,9 @@ echo -e "${GREEN}[OK]   写入 /etc/simple-probe/agent.env  (root:0.0.0  600)${N
 
 # ── 10. Deploy systemd unit ───────────────────────────────────────────────────
 cp "${SCRIPT_DIR}/simple-probe-agent.service" /etc/systemd/system/
+# 用检测到的 Python 解释器路径回填 ExecStart，避免硬编码 /usr/bin/python3
+# 在部分发行版或自定义安装（/usr/local/bin、pyenv 等）下找不到的问题
+sed -i "s#/usr/bin/python3#${PYTHON}#g" /etc/systemd/system/simple-probe-agent.service
 chmod 644 /etc/systemd/system/simple-probe-agent.service
 systemctl daemon-reload
 echo -e "${GREEN}[OK]   部署 simple-probe-agent.service${NC}"
@@ -208,6 +233,13 @@ echo -e "${GREEN}[OK]   启用并启动服务${NC}"
 
 # ── 12. Verify ────────────────────────────────────────────────────────────────
 sleep 2
+if systemctl is-active --quiet simple-probe-agent; then
+    echo -e "${GREEN}[OK]   服务运行中 (active)${NC}"
+else
+    echo -e "${RED}[错误] 服务启动失败，最后 30 行日志如下，请排查后重试：${NC}" >&2
+    journalctl -u simple-probe-agent -n 30 --no-pager
+    exit 1
+fi
 echo ""
 echo "━━━ 安装完成 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

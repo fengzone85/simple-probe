@@ -44,6 +44,9 @@ echo -e "${GREEN}[OK]   systemd daemon-reload 完成${NC}"
 
 # ── 5. Remove system user ─────────────────────────────────────────────────────
 if id simple-probe >/dev/null 2>&1; then
+    # 兜底：确保没有 simple-probe 进程残留，否则 userdel 可能因占用失败
+    pkill -u simple-probe 2>/dev/null || true
+    sleep 1
     if userdel simple-probe >/dev/null 2>&1; then
         echo -e "${GREEN}[OK]   删除系统用户 simple-probe${NC}"
     else
