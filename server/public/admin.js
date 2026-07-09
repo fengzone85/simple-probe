@@ -46,6 +46,7 @@ let currentAgents = [];
 function enterApp() {
   const lp = $('loginPage'); if (lp) lp.style.display = 'none';
   const app = $('app'); if (app) app.hidden = false;
+  settingsLoaded = false;
   loadAppSettings();
   refresh();
 }
@@ -881,16 +882,29 @@ async function onSortChange() {
   loadAgents();
 }
 
-// ---------- 侧栏视图切换（仪表盘 / 客户端） ----------
+// ---------- 侧栏视图切换（仪表盘 / 客户端 / 各设置项） ----------
 let currentView = 'dashboard';
+let settingsLoaded = false;
 function setView(v) {
   document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === v));
   if ($('viewDashboard')) $('viewDashboard').hidden = (v !== 'dashboard');
   if ($('viewClients')) $('viewClients').hidden = (v !== 'clients');
-  if ($('viewSettings')) $('viewSettings').hidden = (v !== 'settings');
+  const isSet = v.indexOf('set-') === 0;
+  if ($('viewSettings')) $('viewSettings').hidden = !isSet;
+  if (isSet) {
+    activateSettingsPane(v.slice(4)); // basic/theme/notify/alert/security/public/skin
+    if (!settingsLoaded) { openSettings(); settingsLoaded = true; }
+  }
   if (v === 'clients') renderClients();
-  if (v === 'settings') openSettings();
   currentView = v;
+}
+// 左侧设置子项 -> 仅显示对应 pane（不重新拉取，避免覆盖未保存的改动）
+function activateSettingsPane(pane) {
+  const root = $('viewSettings');
+  if (!root) return;
+  const titles = { basic: '站点信息', theme: '主题外观', notify: '通知渠道', alert: '告警规则', security: '账户安全', public: '公开与首页', skin: '皮肤模板' };
+  if ($('settingsTitle')) $('settingsTitle').textContent = titles[pane] || '设置';
+  root.querySelectorAll('[data-spane]').forEach(p => { p.style.display = (p.getAttribute('data-spane') === pane) ? '' : 'none'; });
 }
 
 // ---------- live traffic (安全增强：仅前端轮询既有 /api/agents/:id，不新增指令通道) ----------
@@ -977,14 +991,6 @@ function bindEvents() {
       return;
     }
     if (e.target.id === 'detailOverlay' || e.target.closest('#dpBack')) { history.back(); return; }
-    const stab = e.target.closest('[data-stab]');
-    if (stab) {
-      const root = stab.closest('#viewSettings');
-      const t = stab.getAttribute('data-stab');
-      root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('active', b === stab));
-      root.querySelectorAll('[data-spane]').forEach(p => { p.style.display = (p.getAttribute('data-spane') === t) ? '' : 'none'; });
-      return;
-    }
     const go = e.target.closest('[data-go]');
     if (go) {
       moveGroup(Number(go.getAttribute('data-i')), go.getAttribute('data-go'));

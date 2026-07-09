@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>自托管监控 · Host Monitor</title>
-  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="stylesheet" href="style.css?v=8" />
   <style id="customCss"></style>
   <script src="vendor/echarts.min.js"></script>
 </head>
@@ -29,7 +29,16 @@
       <nav class="side-nav">
         <button class="nav-item active" data-view="dashboard">📊 <span>仪表盘</span></button>
         <button class="nav-item" data-view="clients">🖥️ <span>客户端</span></button>
-        <button class="nav-item" data-view="settings">⚙️ <span>设置</span></button>
+        <div class="nav-group">
+          <div class="nav-group-title">设置</div>
+          <button class="nav-item sub" data-view="set-basic">站点信息</button>
+          <button class="nav-item sub" data-view="set-theme">主题外观</button>
+          <button class="nav-item sub" data-view="set-notify">通知渠道</button>
+          <button class="nav-item sub" data-view="set-alert">告警规则</button>
+          <button class="nav-item sub" data-view="set-security">账户安全</button>
+          <button class="nav-item sub" data-view="set-public">公开与首页</button>
+          <button class="nav-item sub" data-view="set-skin">皮肤模板</button>
+        </div>
         <button class="nav-item" id="navSecurity">🔒 <span>安全</span></button>
       </nav>
       <div class="side-foot">
@@ -81,19 +90,10 @@
           <div class="clients-table" id="clientsTable"></div>
         </section>
 
-        <!-- 设置视图（由居中弹窗改为左侧导航视图） -->
+        <!-- 设置视图（由各 tab 拆为左侧独立导航项 + 对应 pane） -->
         <section class="view view-settings" id="viewSettings" hidden>
           <div class="settings-wrap">
-            <h2>⚙️ 设置</h2>
-            <div class="tabs" id="settingsTabs">
-              <button class="btn ghost sm active" data-stab="basic">站点信息</button>
-              <button class="btn ghost sm" data-stab="theme">主题外观</button>
-              <button class="btn ghost sm" data-stab="notify">通知渠道</button>
-              <button class="btn ghost sm" data-stab="alert">告警规则</button>
-              <button class="btn ghost sm" data-stab="security">账户安全</button>
-              <button class="btn ghost sm" data-stab="public">公开与首页</button>
-              <button class="btn ghost sm" data-stab="skin">皮肤模板</button>
-            </div>
+            <h2 id="settingsTitle">站点信息</h2>
 
             <div class="tab-pane" data-spane="basic">
               <div class="field"><label>站点名称</label><input id="s_site_title" placeholder="如 我的服务器监控" /></div>
@@ -326,7 +326,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="flags.js?v=7"></script>
-  <script src="admin.js?v=7"></script>
+  <script src="flags.js?v=8"></script>
+  <script src="admin.js?v=8"></script>
 </body>
 </html>
