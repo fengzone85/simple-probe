@@ -27,6 +27,8 @@ Required (interactive if not given):
   --id     AGENT_ID     Agent/Node identifier
   --token  AGENT_TOKEN  Authentication token (visible in process list — prefer --token-file)
   --token-file FILE     Read token from FILE (recommended; avoids leaking via ps/shell history)
+  --setup-token SECRET  One-click register with server SETUP_TOKEN (no need for --id/--token)
+  --setup-name NAME     Node display name for self-registration (optional)
   --interval SECONDS    Report interval in seconds (default: 15)
 
 Examples:
@@ -53,6 +55,10 @@ while [[ $# -gt 0 ]]; do
             INTERVAL="$2"; shift 2 ;;
         --token-file)
             AGENT_TOKEN_FILE="$2"; shift 2 ;;
+        --setup-token)
+            SETUP_TOKEN="$2"; shift 2 ;;
+        --setup-name)
+            SETUP_NAME="$2"; shift 2 ;;
         --help|-h) usage ;;
         *)
             echo -e "${RED}[错误] 未知参数: $1${NC}" >&2
@@ -117,6 +123,50 @@ if [[ -z "${AGENT_TOKEN:-}" && -n "${AGENT_TOKEN_FILE:-}" ]]; then
 fi
 if [[ -z "${AGENT_TOKEN:-}" && -n "${SIMPP_TOKEN:-}" ]]; then
     AGENT_TOKEN="$SIMPP_TOKEN"
+fi
+
+# ── 3c. One-click self-registration via SETUP_TOKEN ─────────────────────────────
+# 若提供 --setup-token，则向服务端自助注册，自动获得 AGENT_ID / AGENT_TOKEN，
+# 无需在后台手动「新建客户端」。注册后行为与普通安装完全一致（仍只上报指标）。
+if [[ -n "${SETUP_TOKEN:-}" ]]; then
+    if [[ -z "${SERVER_URL:-}" ]]; then
+        echo -e "${RED}[错误] 使用 --setup-token 必须同时提供 --server${NC}" >&2
+        exit 1
+    fi
+    echo -e "${YELLOW}[信息] 正在通过 SETUP_TOKEN 向服务端自助注册客户端…${NC}"
+    # 用 Python 标准库发 HTTPS 请求（无需额外依赖）
+    REG_JSON="$("$PYTHON" - "$SERVER_URL" "$SETUP_TOKEN" "${SETUP_NAME:-}" <<'PYEOF'
+import sys, json, urllib.request, urllib.error
+server, token, name = sys.argv[1], sys.argv[2], sys.argv[3]
+url = server.rstrip('/') + '/api/setup/register'
+payload = {"setup_token": token}
+if name:
+    payload["name"] = name
+data = json.dumps(payload).encode()
+req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=15) as r:
+        body = json.loads(r.read().decode())
+    print(json.dumps({"ok": True, "id": body.get("agent_id"), "tok": body.get("agent_token")}))
+except urllib.error.HTTPError as e:
+    msg = e.read().decode()
+    try:
+        msg = json.loads(msg).get("error", msg)
+    except Exception:
+        pass
+    print(json.dumps({"ok": False, "error": "HTTP %s: %s" % (e.code, msg)}))
+except Exception as e:
+    print(json.dumps({"ok": False, "error": str(e)}))
+PYEOF
+)"
+    if ! echo "$REG_JSON" | "$PYTHON" -c 'import sys, json; sys.exit(0 if json.load(sys.stdin).get("ok") else 1)' 2>/dev/null; then
+        ERR=$(echo "$REG_JSON" | "$PYTHON" -c 'import sys, json; print(json.load(sys.stdin).get("error", "unknown"))' 2>/dev/null)
+        echo -e "${RED}[错误] 自助注册失败: ${ERR}${NC}" >&2
+        exit 1
+    fi
+    AGENT_ID=$(echo "$REG_JSON" | "$PYTHON" -c 'import sys, json; print(json.load(sys.stdin)["id"])' 2>/dev/null)
+    AGENT_TOKEN=$(echo "$REG_JSON" | "$PYTHON" -c 'import sys, json; print(json.load(sys.stdin)["tok"])' 2>/dev/null)
+    echo -e "${GREEN}[OK]   自助注册成功，节点 ID: ${AGENT_ID}${NC}"
 fi
 
 # ── 4. Interactive config collection ─────────────────────────────────────────

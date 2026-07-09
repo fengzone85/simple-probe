@@ -3,6 +3,10 @@
 受控端（Agent），负责在被控机器上采集系统指标并**只出站**上报给服务端。
 与 Windows Agent **完全相同的上报协议**，服务端无需任何改动。
 
+> **推荐部署方式**：直接用仓库根目录的[统一一键脚本](https://github.com/fengzone85/simple-probe/blob/main/install.sh)安装受控端与服务端——
+> `curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/install.sh -o install.sh && sudo bash install.sh`。
+> 本文档描述的是原生 systemd 受控端的细节与手动 `agent/install.sh` 用法。
+
 ---
 
 ## 两种部署形态

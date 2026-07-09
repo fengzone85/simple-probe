@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Simple Probe — 一键部署脚本
+#   借鉴 Nezha / Komari / Pulse 的「单文件下载 + 交互菜单 + 统一管理」范式
+# =============================================================================
+# 单条命令即可开始（建议在审查脚本后运行）：
+#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/install.sh -o install.sh
+#   sudo bash install.sh
+#
+# 也可作为管理脚本重复运行（查看状态 / 卸载）。
+#
+# 安全说明：
+#   - 本脚本只下载本项目自有文件（agent 载荷）或 git clone 本项目源码，
+#     不执行任何第三方二进制；仍建议下载后先 `cat install.sh` 审查。
+#   - 受控端注册使用服务端 SETUP_TOKEN，仅用于创建客户端记录，不建立任何
+#     指令通道（agent 注册后依旧只上报指标）。
+# =============================================================================
+
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/simple-probe/main}"
+REPO_GIT="${REPO_GIT:-https://github.com/fengzone85/simple-probe.git}"
+SRC_DIR="/opt/simple-probe-src"
+
+# ── 非交互参数（供 CI / 批量部署）─────────────────────────────────────────────
+ACTION=""
+A_SERVER=""; A_ID=""; A_TOKEN=""; A_TOKEN_FILE=""; A_SETUP=""; A_SETUP_NAME=""; A_INTERVAL=""
+
+show_usage() {
+    cat <<EOF
+Simple Probe 一键部署脚本
+
+用法（交互）：
+  sudo bash install.sh                 # 显示菜单，逐项选择
+
+用法（非交互 / 一键）：
+  # 安装服务端（Docker，自动生成强随机令牌）
+  sudo bash install.sh --install-server
+
+  # 安装受控端（需先在服务端后台「新建客户端」拿到 ID/Token）
+  sudo bash install.sh --install-agent --server https://your-server:8008 --id NODE1 --token SECRET
+
+  # 安装受控端（一键自助注册：只需服务端地址 + SETUP_TOKEN）
+  sudo bash install.sh --install-agent --server https://your-server:8008 --setup-token <SETUP_TOKEN>
+
+  # 查看状态 / 卸载
+  sudo bash install.sh --status
+  sudo bash install.sh --uninstall
+
+选项：
+  --install-server        安装服务端（Docker）
+  --install-agent         安装受控端（systemd）
+  --status                查看服务端/受控端状态
+  --uninstall             卸载服务端与受控端
+  --server URL            SERVER_URL
+  --id / --token          节点 ID 与令牌（手动模式）
+  --token-file FILE       从文件读取令牌（推荐，避免明文暴露）
+  --setup-token SECRET    用服务端 SETUP_TOKEN 自助注册（免 --id/--token）
+  --setup-name NAME       自助注册的节点显示名（可选）
+  --interval SEC          上报间隔（秒，默认 15）
+  --repo URL              自定义 raw 仓库地址（默认本项目 main 分支）
+EOF
+}
+
+# ── OS / 架构自检 ──────────────────────────────────────────────────────────────
+detect_os() {
+    if [[ -r /etc/os-release ]]; then
+        . /etc/os-release 2>/dev/null
+        echo "${PRETTY_NAME:-${ID:-unknown}}"
+    else
+        echo "unknown"
+    fi
+}
+detect_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "amd64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        *) echo "$(uname -m)" ;;
+    esac
+}
+
+download() {
+    local url="$1" out="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$out"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$out" "$url"
+    else
+        echo -e "${RED}[错误] 需要 curl 或 wget 才能下载文件${NC}" >&2
+        return 1
+    fi
+}
+
+# ── 受控端安装 ─────────────────────────────────────────────────────────────────
+install_agent() {
+    local args=()
+    [[ -n "$A_SERVER" ]]     && args+=(--server "$A_SERVER")
+    [[ -n "$A_ID" ]]         && args+=(--id "$A_ID")
+    [[ -n "$A_TOKEN" ]]      && args+=(--token "$A_TOKEN")
+    [[ -n "$A_TOKEN_FILE" ]] && args+=(--token-file "$A_TOKEN_FILE")
+    [[ -n "$A_SETUP" ]]      && args+=(--setup-token "$A_SETUP")
+    [[ -n "$A_SETUP_NAME" ]] && args+=(--setup-name "$A_SETUP_NAME")
+    [[ -n "$A_INTERVAL" ]]   && args+=(--interval "$A_INTERVAL")
+
+    # 仓库内运行：直接复用本地 agent/install.sh（已充分测试）
+    if [[ -f "$SCRIPT_DIR/agent/install.sh" ]]; then
+        echo -e "${GREEN}[OK]   使用本地 agent/install.sh${NC}"
+        bash "$SCRIPT_DIR/agent/install.sh" "${args[@]}"
+        return
+    fi
+
+    # 单文件 curl 场景：下载 agent 载荷到临时目录后运行
+    local tmp; tmp="$(mktemp -d)"
+    echo -e "${YELLOW}[信息] 从 ${REPO_RAW}/agent 下载受控端载荷…${NC}"
+    for f in install.sh uninstall.sh agent.py collector.py simple-probe-agent.service; do
+        if ! download "$REPO_RAW/agent/$f" "$tmp/$f"; then
+            echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2
+            rm -rf "$tmp"; exit 1
+        fi
+    done
+    chmod +x "$tmp/install.sh"
+    bash "$tmp/install.sh" "${args[@]}"
+    rm -rf "$tmp"
+}
+
+# ── Docker 保障 ────────────────────────────────────────────────────────────────
+ensure_docker() {
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        return 0
+    fi
+    echo -e "${YELLOW}[信息] 未检测到 Docker，尝试安装…${NC}"
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -qq && apt-get install -y docker.io docker-compose-plugin
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf -y install docker-ce docker-ce-cli docker-compose-plugin
+    elif command -v yum >/dev/null 2>&1; then
+        yum -y install docker-ce docker-ce-cli docker-compose-plugin
+    elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache docker docker-cli-compose
+    else
+        echo -e "${YELLOW}[警告] 无法用包管理器安装 Docker，回退到官方安装脚本（第三方）${NC}"
+        curl -fsSL https://get.docker.com | sh
+    fi
+    systemctl enable --now docker 2>/dev/null || true
+}
+
+# ── 服务端安装 ─────────────────────────────────────────────────────────────────
+install_server() {
+    ensure_docker || exit 1
+
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "${RED}[错误] 需要 git 才能拉取服务端源码${NC}" >&2
+        exit 1
+    fi
+
+    if [[ -d "$SRC_DIR/.git" ]]; then
+        echo -e "${YELLOW}[信息] 更新已有源码…${NC}"
+        git -C "$SRC_DIR" pull --ff-only
+    else
+        echo -e "${YELLOW}[信息] 克隆服务端源码到 $SRC_DIR …${NC}"
+        git clone --depth 1 "$REPO_GIT" "$SRC_DIR"
+    fi
+
+    cd "$SRC_DIR/server"
+
+    if [[ ! -f .env ]]; then
+        cp .env.example .env
+        local admin sess setup
+        admin="$(openssl rand -hex 32)"
+        sess="$(openssl rand -hex 32)"
+        setup="$(openssl rand -hex 16)"
+        sed -i "s#^ADMIN_TOKEN=.*#ADMIN_TOKEN=${admin}#" .env
+        sed -i "s#^SESSION_SECRET=.*#SESSION_SECRET=${sess}#" .env
+        sed -i "s#^SETUP_TOKEN=.*#SETUP_TOKEN=${setup}#" .env
+        echo -e "${GREEN}[OK]   已生成随机 ADMIN_TOKEN / SESSION_SECRET / SETUP_TOKEN${NC}"
+        echo -e "${YELLOW}[重要] SETUP_TOKEN = ${setup}${NC}"
+        echo -e "${YELLOW}        受控端一键注册请用: --setup-token ${setup}${NC}"
+        echo -e "${YELLOW}        ADMIN_TOKEN 已写入 .env，请妥善保存（仅显示此一次）${NC}"
+    else
+        echo -e "${GREEN}[OK]   已存在 .env，跳过生成${NC}"
+    fi
+
+    echo -e "${YELLOW}[信息] 构建并启动服务端（首次需编译 better-sqlite3，约 1-2 分钟）…${NC}"
+    docker compose up -d --build
+
+    echo ""
+    echo -e "${GREEN}✅ 服务端已启动${NC}"
+    echo -e "   仪表盘: http://localhost:8080  （当前为明文测试端口）"
+    echo -e "   生产请将 Nginx + TLS 反代到 127.0.0.1:8080（见 README 部署章节）"
+}
+
+# ── 状态 / 卸载 ────────────────────────────────────────────────────────────────
+status_all() {
+    echo "== 服务端 (Docker) =="
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q simple-probe-server; then
+        docker ps --filter name=simple-probe-server --format '  {{.Names}}  {{.Status}}'
+    else
+        echo "  未运行（或服务端未安装）"
+    fi
+    echo "== 受控端 (systemd) =="
+    if systemctl list-unit-files simple-probe-agent.service >/dev/null 2>&1; then
+        if systemctl is-active --quiet simple-probe-agent; then
+            echo "  active"
+        else
+            echo "  inactive / 未运行"
+        fi
+    else
+        echo "  未安装"
+    fi
+}
+
+uninstall_all() {
+    echo "== 卸载受控端 =="
+    if [[ -f /opt/simple-probe/uninstall.sh ]]; then
+        bash /opt/simple-probe/uninstall.sh || true
+    else
+        echo "  受控端未安装"
+    fi
+    echo "== 卸载服务端 (Docker) =="
+    if [[ -d "$SRC_DIR/server" ]]; then
+        ( cd "$SRC_DIR/server" && docker compose down ) || true
+        echo -e "${YELLOW}[提示] 源码仍在 $SRC_DIR，数据库在 Docker 卷中；如需彻底清除请手动删除。${NC}"
+    else
+        echo "  服务端未安装"
+    fi
+}
+
+# ── 菜单 ───────────────────────────────────────────────────────────────────────
+show_menu() {
+    echo ""
+    echo -e "${BLUE}━━━ Simple Probe 一键部署 ━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  系统: ${GREEN}$(detect_os)${NC}  架构: ${GREEN}$(detect_arch)${NC}"
+    echo ""
+    echo "  1) 安装服务端 (Docker)"
+    echo "  2) 安装受控端 Agent (systemd)"
+    echo "  3) 查看状态"
+    echo "  4) 卸载"
+    echo "  0) 退出"
+    echo ""
+    read -r -p "请选择 [0-4]: " c
+    case "$c" in
+        1) install_server ;;
+        2) install_agent ;;
+        3) status_all ;;
+        4) uninstall_all ;;
+        *) echo "退出"; exit 0 ;;
+    esac
+}
+
+# ── 参数解析 ───────────────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --install-server) ACTION="server"; shift ;;
+        --install-agent)  ACTION="agent";  shift ;;
+        --status)         ACTION="status"; shift ;;
+        --uninstall)      ACTION="uninstall"; shift ;;
+        --server)      A_SERVER="$2"; shift 2 ;;
+        --id)          A_ID="$2"; shift 2 ;;
+        --token)       A_TOKEN="$2"; shift 2 ;;
+        --token-file)  A_TOKEN_FILE="$2"; shift 2 ;;
+        --setup-token) A_SETUP="$2"; shift 2 ;;
+        --setup-name)  A_SETUP_NAME="$2"; shift 2 ;;
+        --interval)    A_INTERVAL="$2"; shift 2 ;;
+        --repo)        REPO_RAW="$2"; shift 2 ;;
+        -h|--help)     show_usage; exit 0 ;;
+        *) echo -e "${RED}[错误] 未知参数: $1${NC}" >&2; show_usage; exit 1 ;;
+    esac
+done
+
+# ── 入口 ───────────────────────────────────────────────────────────────────────
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo -e "${RED}[错误] 必须以 root 运行（sudo bash install.sh）${NC}" >&2
+    exit 1
+fi
+
+if [[ -n "$ACTION" ]]; then
+    case "$ACTION" in
+        server)    install_server ;;
+        agent)     install_agent ;;
+        status)    status_all ;;
+        uninstall) uninstall_all ;;
+    esac
+elif [[ -t 0 ]]; then
+    while true; do show_menu; done
+else
+    show_usage
+    exit 1
+fi

@@ -40,6 +40,26 @@ router.post('/report', agentAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- 一键脚本：受控端自助注册（受 SETUP_TOKEN 守卫）----
+// 启用条件：服务端 .env 配置了 SETUP_TOKEN。受控端携带该令牌调用本端点，
+// 服务端自动创建客户端并返回 id/token，使 agent 安装做到「只填域名+密钥」。
+// 不建立任何指令通道——注册后 agent 仍只上报指标，服务端不持有其任何控制权。
+router.post('/setup/register', (req, res) => {
+  const setupToken = process.env.SETUP_TOKEN;
+  if (!setupToken) {
+    return res.status(403).json({ error: '服务端未启用一键注册（未配置 SETUP_TOKEN）' });
+  }
+  const provided = (req.body && req.body.setup_token) || (req.headers['x-setup-token'] || '').trim();
+  if (!provided || !safeEqual(provided, setupToken)) {
+    return res.status(401).json({ error: 'invalid setup token' });
+  }
+  const { id, token } = db.createAgent({
+    name: str(req.body.name, 100) || undefined,
+    note: str(req.body.note, 500)
+  });
+  res.json({ agent_id: id, agent_token: token });
+});
+
 // ---- Admin: list agents + latest metric + online status ----
 router.get('/agents', adminOrReadonly, (req, res) => {
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
