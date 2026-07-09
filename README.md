@@ -9,11 +9,14 @@
 ```bash
 # 1) 最小化镜像（如 Debian 13）可能未预装 curl，先安装（仅 apt 系系统需要；已装可跳过）
 apt-get update && apt-get install -y curl
-# 2) 一键拉取并运行安装脚本（默认分支 master）
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh | bash
+# 2) 下载安装脚本（默认分支 master）
+curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
+# 3) 赋权并运行（先下载成文件，便于审阅后再执行）
+chmod +x install.sh
+sudo ./install.sh
 ```
 
-> 若系统已自带 curl，可直接执行第 2 步。脚本会自动安装 Docker（含 compose / buildx 插件，已兼容 Debian 13 预装冲突包）、git 等依赖。
+> 若系统已自带 curl，可跳过第 1 步。脚本会自动安装 Docker（含 compose / buildx 插件，已兼容 Debian 13 预装冲突包）、git 等依赖。
 
 非交互（CI / 批量）用法见 `sudo bash install.sh --help`；后续版本更新（脚本 / 服务端 / 受控端）见文末「更新」章节。受控端支持两种模式：
 - **手动**：在后台「新建客户端」拿到 `AGENT_ID`/`AGENT_TOKEN` 后填入；

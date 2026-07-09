@@ -3,13 +3,15 @@
 # Simple Probe — 一键部署脚本
 #   借鉴 Nezha / Komari / Pulse 的「单文件下载 + 交互菜单 + 统一管理」范式
 # =============================================================================
-# 单条命令即可开始（建议在审查脚本后运行）：
+# 一条命令下载并运行（建议先下载审阅，再 sudo 执行）：
 #   # 最小化镜像可能未预装 curl，先安装（仅 Debian/Ubuntu 等 apt 系统需要）
 #   apt-get update && apt-get install -y curl
-#   # 一键拉取并运行（默认分支 master）
-#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh | bash
+#   # 下载安装脚本（默认分支 master）
+#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
+#   chmod +x install.sh
+#   sudo ./install.sh
 #
-# 也可作为管理脚本重复运行（查看状态 / 卸载）。
+# 也可作为管理脚本重复运行（查看状态 / 卸载 / 更新）。
 #
 # 安全说明：
 #   - 本脚本只下载本项目自有文件（agent 载荷）或 git clone 本项目源码，
