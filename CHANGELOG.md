@@ -1,5 +1,9 @@
 # Changelog
 
+## CI：GitHub Actions 自动跑安全单元测试（2026-07-09）
+- 新增 `.github/workflows/test.yml`：push / PR 到 `master` 时，在 ubuntu-latest + Node 22 上自动 `npm install` 并运行 `npm test`（核心安全函数单元测试）。`better-sqlite3` 走 ubuntu 预编译二进制，无需手动 build。
+- 配合上轮单元测试形成审计闭环：核心安全函数（totp / auth / validate）在每次提交自动回归。
+
 ## 单元测试：核心安全函数覆盖（2026-07-09）
 - 落实安全审查 v3.1「推荐后续关注 #2：为核心安全函数增加单元测试」。
 - 新增 `server/test/security.test.js`（Node 内置 `node:test`，零第三方依赖），覆盖：
