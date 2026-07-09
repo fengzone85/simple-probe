@@ -47,6 +47,12 @@ Simple Probe 一键部署脚本
   # 安装受控端（一键自助注册：只需服务端地址 + SETUP_TOKEN）
   sudo bash install.sh --install-agent --server https://your-server:8008 --setup-token <SETUP_TOKEN>
 
+  # 更新本安装脚本（覆盖为 GitHub 最新版）
+  sudo bash install.sh --update-script
+
+  # 更新服务端（拉取最新源码并重建容器）
+  sudo bash install.sh --update-server
+
   # 查看状态 / 卸载
   sudo bash install.sh --status
   sudo bash install.sh --uninstall
@@ -54,6 +60,8 @@ Simple Probe 一键部署脚本
 选项：
   --install-server        安装服务端（Docker）
   --install-agent         安装受控端（systemd）
+  --update-script         更新本安装脚本为最新版
+  --update-server         更新服务端（git pull + 重建容器）
   --status                查看服务端/受控端状态
   --uninstall             卸载服务端与受控端
   --server URL            SERVER_URL
@@ -255,7 +263,9 @@ install_server() {
 
     if [[ -d "$SRC_DIR/.git" ]]; then
         echo -e "${YELLOW}[信息] 更新已有源码…${NC}"
-        git -C "$SRC_DIR" pull --ff-only
+        git -C "$SRC_DIR" fetch origin master -q
+        git -C "$SRC_DIR" reset --hard origin/master
+        git -C "$SRC_DIR" branch -u origin/master master 2>/dev/null || true
     else
         echo -e "${YELLOW}[信息] 克隆服务端源码到 $SRC_DIR …${NC}"
         git clone --depth 1 "$REPO_GIT" "$SRC_DIR"
@@ -289,6 +299,70 @@ install_server() {
     echo -e "${GREEN}✅ 服务端已启动${NC}"
     echo -e "   仪表盘: http://localhost:8080  （当前为明文测试端口）"
     echo -e "   生产请将 Nginx + TLS 反代到 127.0.0.1:8080（见 README 部署章节）"
+}
+
+# ── 更新：本安装脚本自身 ──────────────────────────────────────────────────────
+update_script() {
+    ensure_deps || return 1
+    echo -e "${YELLOW}[信息] 下载最新 install.sh…${NC}"
+    local new; new="$(mktemp)"
+    if ! download "$REPO_RAW/install.sh" "$new"; then
+        echo -e "${RED}[错误] 下载 install.sh 失败${NC}" >&2; rm -f "$new"; return 1
+    fi
+    local target
+    if [[ -f "$0" && -w "$(dirname "$0")" ]]; then
+        target="$(realpath "$0")"
+    else
+        target="/usr/local/bin/simple-probe-install.sh"
+    fi
+    cp "$new" "$target"
+    chmod +x "$target"
+    rm -f "$new"
+    echo -e "${GREEN}[OK]   已更新脚本: $target${NC}"
+    echo -e "${YELLOW}[提示] 请使用更新后的脚本重新运行: sudo bash $target${NC}"
+}
+
+# ── 更新：服务端（拉取最新源码并重建容器）─────────────────────────────────────
+update_server() {
+    ensure_docker || return 1
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "${YELLOW}[信息] 未检测到 git，尝试安装…${NC}"
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y git
+        elif command -v dnf >/dev/null 2>&1; then dnf -y install git
+        elif command -v yum >/dev/null 2>&1; then yum -y install git
+        elif command -v apk >/dev/null 2>&1; then apk add --no-cache git
+        fi
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "${RED}[错误] 需要 git 才能更新服务端${NC}" >&2; return 1
+    fi
+    if [[ ! -d "$SRC_DIR/server" ]]; then
+        echo -e "${RED}[错误] 未检测到服务端安装（缺少 $SRC_DIR/server），请先「安装服务端」${NC}" >&2
+        return 1
+    fi
+
+    if [[ -d "$SRC_DIR/.git" ]]; then
+        echo -e "${YELLOW}[信息] 拉取最新源码并同步到 master（丢弃本地对源码的改动）…${NC}"
+        git -C "$SRC_DIR" fetch origin master -q
+        git -C "$SRC_DIR" reset --hard origin/master
+        git -C "$SRC_DIR" branch -u origin/master master 2>/dev/null || true
+    else
+        # 早期手动拷贝部署（无 .git）：改造为 git 跟踪，便于后续一键更新；
+        # .env 等未跟踪文件不会被覆盖。
+        echo -e "${YELLOW}[信息] 当前为非 git 手动部署，改造为 git 跟踪以便更新…${NC}"
+        git -C "$SRC_DIR" init -q
+        git -C "$SRC_DIR" remote add origin "$REPO_GIT" 2>/dev/null \
+          || git -C "$SRC_DIR" remote set-url origin "$REPO_GIT"
+        git -C "$SRC_DIR" fetch origin master -q
+        git -C "$SRC_DIR" checkout -B master -f origin/master
+        git -C "$SRC_DIR" branch --set-upstream-to=origin/master master
+    fi
+
+    cd "$SRC_DIR/server"
+    echo -e "${YELLOW}[信息] 重建并重启服务端…${NC}"
+    docker compose up -d --build
+    echo -e "${GREEN}[OK]   服务端已更新并重启${NC}"
 }
 
 # ── 状态 / 卸载 ────────────────────────────────────────────────────────────────
@@ -335,16 +409,20 @@ show_menu() {
     echo ""
     echo "  1) 安装服务端 (Docker)"
     echo "  2) 安装受控端 Agent (systemd)"
-    echo "  3) 查看状态"
-    echo "  4) 卸载"
+    echo "  3) 更新安装脚本 (install.sh 自身)"
+    echo "  4) 更新服务端 (拉取最新 + 重建)"
+    echo "  5) 查看状态"
+    echo "  6) 卸载"
     echo "  0) 退出"
     echo ""
-    read -r -p "请选择 [0-4]: " c
+    read -r -p "请选择 [0-6]: " c
     case "$c" in
         1) install_server ;;
         2) install_agent ;;
-        3) status_all ;;
-        4) uninstall_all ;;
+        3) update_script ;;
+        4) update_server ;;
+        5) status_all ;;
+        6) uninstall_all ;;
         *) echo "退出"; exit 0 ;;
     esac
 }
@@ -354,6 +432,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --install-server) ACTION="server"; shift ;;
         --install-agent)  ACTION="agent";  shift ;;
+        --update-script)  ACTION="update-script"; shift ;;
+        --update-server)  ACTION="update-server"; shift ;;
         --status)         ACTION="status"; shift ;;
         --uninstall)      ACTION="uninstall"; shift ;;
         --server)      A_SERVER="$2"; shift 2 ;;
@@ -379,6 +459,8 @@ if [[ -n "$ACTION" ]]; then
     case "$ACTION" in
         server)    install_server ;;
         agent)     install_agent ;;
+        update-script) update_script ;;
+        update-server) update_server ;;
         status)    status_all ;;
         uninstall) uninstall_all ;;
     esac
