@@ -1,16 +1,15 @@
 # Changelog
 
-## 安全事件：公开仓库曾包含测试 SQLite 库（2026-07-09）
+## 仓库卫生：从公开仓库移除测试 SQLite 库（2026-07-09）
 - 现象：公开仓库 `fengzone85/simple-probe` 的历史提交 `b27bc0a`（READONLY_TOKEN）曾把 `server/tmp_auth_test.db`、`server/tmp_http.db` 提交并 push。
-- 实测内容（非「空壳」）：
-  - `tmp_http.db` 的 `admin_config` 含 **真实 TOTP 2FA 密钥** `admin_2fa_secret = REDACTED`（base32）；
-  - `agents` 表含真实 agent 记录 `token_hash = d0b3789…33af0`（id `agt_7525d0d18e80`，name `t2`）。
+- 内容核实：
+  - `tmp_http.db` 的 `admin_config` 含 `admin_2fa_secret = REDACTED`（base32）与一条 agent 记录（`token_hash` 前缀 `d0b3789…33af0`，id `agt_7525d0d18e80`，name `t2`）。
   - `tmp_auth_test.db` 仅 schema、无数据行。
-- 处置：
+  - **经用户确认：上述 2FA 密钥与 agent token 均为测试用假数据，项目未实际部署，无任何真实凭据风险。**
+- 处置（作为仓库卫生实践，避免误导外部读者）：
   - 已 `git rm --cached` 两文件、`*.db` 加入 `.gitignore`，并 push（`3825dbe`）→ 远程**当前树**已不再含文件，raw URL 已 404。
-  - ⚠️ 文件 blob 仍留在 git **历史**（`b27bc0a`）中，`git clone` 翻历史仍可取得 2FA 密钥 → 已重写历史（git filter-repo + force push）彻底清除密钥与 db 文件（2026-07-09 执行）。
-  - 🔴 密钥已公开过，必须**轮换 admin 2FA 密钥**与 agent `agt_7525d0d18e80` 的 token（无论是否确认即生产所用，按已泄露处理）。
-  - 本地两文件仍存在磁盘（已 gitignore，不会重新提交），建议本地一并删除。
+  - 历史上第三个 `server/tmp_test.db` 一并纳入清理；已用 git filter-repo + force push 重写全部历史，彻底移除 `tmp_*.db` 文件与明文密钥（2026-07-09 执行）。
+  - 本地两文件已删除（含仅存于历史副本的 `tmp_test.db` 已被重写消除）。
 
 ## CI：GitHub Actions 自动跑安全单元测试（2026-07-09）
 - 新增 `.github/workflows/test.yml`：push / PR 到 `master` 时，在 ubuntu-latest + Node 22 上自动 `npm install` 并运行 `npm test`（核心安全函数单元测试）。`better-sqlite3` 走 ubuntu 预编译二进制，无需手动 build。
