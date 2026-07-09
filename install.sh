@@ -154,11 +154,20 @@ ensure_deps() {
     return 0
 }
 
-# ── 启动并确认 Docker 守护进程真正就绪（含 socket activation 兜底）─────────────────
+# ── 启动并确认 Docker 守护进程真正就绪（含 containerd / socket activation 兜底）──
+# 先确保容器运行时 containerd 健康：若 overlayfs snapshotter 的元数据目录缺失
+# （如曾被手动清理后残留的 containerd 进程未重建），build 阶段会报
+# “failed to open database file: .../io.containerd.snapshotter.v1.overlayfs/metadata.db”
 start_docker_daemon() {
+    local i
+    # 拉起并等待 containerd 重建 snapshotter 元数据目录
+    systemctl restart containerd 2>/dev/null || true
+    for i in $(seq 1 8); do
+        [ -d /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs ] && break
+        sleep 1
+    done
     systemctl enable docker 2>/dev/null || true
     systemctl start docker 2>/dev/null || true
-    local i
     for i in $(seq 1 10); do
         docker info >/dev/null 2>&1 && return 0
         sleep 2
@@ -167,6 +176,7 @@ start_docker_daemon() {
     # “no sockets found via socket activation”，禁用 socket 后直启 service 即可
     systemctl disable docker.socket 2>/dev/null || true
     systemctl stop docker.socket 2>/dev/null || true
+    systemctl restart containerd 2>/dev/null || true
     systemctl restart docker 2>/dev/null || true
     for i in $(seq 1 10); do
         docker info >/dev/null 2>&1 && return 0
