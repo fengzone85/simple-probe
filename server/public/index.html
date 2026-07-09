@@ -49,9 +49,13 @@
     <section class="grid" id="grid"></section>
 
     <!-- Detail modal -->
-    <div class="modal-bg" id="detailModal">
-      <div class="modal">
-        <h2 id="detailTitle">客户端详情</h2>
+    <!-- 详情滑入面板 -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="dp-header">
+        <button class="btn ghost sm dp-back" id="dpBack">← 返回</button>
+        <span class="dp-title" id="dpTitle">客户端详情</span>
+      </div>
+      <div class="dp-body">
         <div class="range" id="rangeBar">
           <button class="btn ghost sm active" data-r="1h">1小时</button>
           <button class="btn ghost sm" data-r="6h">6小时</button>
@@ -61,7 +65,7 @@
         <div class="live-traffic" id="liveTraffic">
           <div class="lt"><span class="lt-l">↓ 下行</span><span class="lt-v" id="ltRx">—</span></div>
           <div class="lt"><span class="lt-l">↑ 上行</span><span class="lt-v" id="ltTx">—</span></div>
-          <div class="lt-hint">实时速率 · 每 3 秒刷新（基于受控端本地已上报数据，不经服务端指令）</div>
+          <div class="lt-hint">实时速率 · 每 3 秒刷新</div>
         </div>
         <div class="charts">
           <div class="chart"><h4>CPU 使用率 (%)</h4><div id="cCpu"></div></div>
@@ -74,9 +78,9 @@
           <div class="chart"><h4>网络质量（到探测点延迟 ms）</h4><div id="cProbe"></div></div>
           <div class="chart"><h4>本月流量 (vs 配额)</h4><div id="cTraffic"></div></div>
         </div>
-        <div class="actions"><button class="btn ghost" data-close="detailModal">关闭</button></div>
       </div>
     </div>
+    <div class="detail-overlay" id="detailOverlay"></div>
 
     <!-- Create modal -->
     <div class="modal-bg" id="createModal">

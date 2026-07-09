@@ -234,3 +234,59 @@ header h1 .dot { color: var(--accent); }
 .group-order .go-name { font-size: 13px; }
 .group-order .go-actions { display: flex; gap: 6px; }
 .group-order .empty { color: var(--muted); font-size: 12px; background: transparent; border: 1px dashed var(--border); justify-content: center; }
+
+/* ======================== */
+/* P2: Detail slide-in panel */
+/* ======================== */
+.detail-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 90;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s;
+}
+.detail-overlay.show { opacity: 1; pointer-events: auto; }
+
+.detail-panel {
+  position: fixed; top: 0; right: 0;
+  width: 480px; max-width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(0,0,0,.4);
+  z-index: 95;
+  transform: translateX(100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.detail-panel.open { transform: translateX(0); }
+
+.dp-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dp-back { flex-shrink: 0; }
+.dp-title {
+  font-size: 14px; font-weight: 700;
+  color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.dp-body {
+  flex: 1; overflow-y: auto;
+  padding: 10px 14px 16px;
+}
+.dp-body .range { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.dp-body .live-traffic { margin-bottom: 12px; }
+.dp-body .charts { display: flex; flex-direction: column; gap: 12px; }
+.dp-body .chart { border-radius: 10px; }
+
+/* mobile: full-width panel */
+@media (max-width: 540px) {
+  .detail-panel { width: 100vw; }
+  .detail-overlay { display: none; } /* on mobile tap outside = back already works */
+}

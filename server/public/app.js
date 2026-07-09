@@ -6,6 +6,33 @@ let detailId = null;
 let detailRange = '24h';
 let liveTimer = null;
 const charts = {};
+
+// ---------- hash router (#/node/:id) ----------
+function initRouter() {
+  window.addEventListener('hashchange', onHashChange);
+  onHashChange(); // bootstrap from current URL
+}
+function onHashChange() {
+  const m = location.hash.match(/^#\/node\/(\d+)$/);
+  if (m) { openDetailPanel(m[1]); } else { closeDetailPanel(); }
+}
+function navigateDetail(id) { location.hash = `#/node/${id}`; }
+function closeDetailPanel() {
+  const p = $('detailPanel'); const o = $('detailOverlay');
+  if (p) p.classList.remove('open');
+  if (o) o.classList.remove('show');
+  stopLiveTraffic();
+  detailId = null;
+}
+function openDetailPanel(id) {
+  if (detailId === id && $('detailPanel') && $('detailPanel').classList.contains('open')) return;
+  detailId = id;
+  const p = $('detailPanel'); const o = $('detailOverlay');
+  if (p) p.classList.add('open');
+  if (o) o.classList.add('show');
+  loadDetail();
+  startLiveTraffic(id);
+}
 // 设置中心（站点名 / 自定义 CSS / 默认排序 / 分组顺序）
 let appSettings = { site_title: '', custom_css: '', default_sort: 'created', group_order: [] };
 let currentAgents = [];
@@ -336,12 +363,9 @@ function fallbackCopy(text) {
 
 // ---------- detail ----------
 async function openDetail(id) {
-  detailId = id;
-  openModal('detailModal');
   const a = await api(`/api/agents/${id}`).catch(() => null);
-  if (a) $('detailTitle').textContent = `${a.name} · 详情`;
-  await loadDetail();
-  startLiveTraffic(id);
+  if (a) $('dpTitle').textContent = `${a.name} · 详情`;
+  navigateDetail(id);
 }
 async function loadDetail() {
   if (!detailId) return;
@@ -682,6 +706,7 @@ function bindEvents() {
       if (cid === 'detailModal') stopLiveTraffic();
       return;
     }
+    if (e.target.id === 'detailOverlay' || e.target.closest('#dpBack')) { history.back(); return; }
     const stab = e.target.closest('[data-stab]');
     if (stab) {
       const root = stab.closest('#settingsModal');
@@ -732,8 +757,10 @@ async function initLoad() {
     enterApp();
   } catch (e) { showLoginPage(); }
 }
-setInterval(() => { if (detailId && $('detailModal').classList.contains('show')) loadDetail(); else refresh(); }, 10000);
+setInterval(() => { if (detailId && $('detailPanel') && $('detailPanel').classList.contains('open')) loadDetail(); else refresh(); }, 10000);
 window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));
+$('dpBack').addEventListener('click', () => history.back());
+initRouter();
 
 // ---------- 2FA (TOTP) ----------
 async function load2FAStatus() {
