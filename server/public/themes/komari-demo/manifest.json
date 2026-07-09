@@ -1,0 +1,6 @@
+{
+  "id": "komari-demo",
+  "name": "Komari 适配皮肤（演示）",
+  "author": "simple-probe",
+  "description": "演示如何将 Komari 社区皮肤的前端请求层适配到 simple-probe：优先 WebSocket /api/clients，未装 ws 时降级为 /api/nodes + /api/recent 轮询。证明 Komari 皮肤可在本项目运行。"
+}

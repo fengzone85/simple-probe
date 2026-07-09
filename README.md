@@ -93,6 +93,12 @@ sudo ./install.sh
   nginx/monitor.conf.example   # TLS 反代 + 限流示例
 ```
 
+## 公开状态页、后台与第三方皮肤
+
+- **公开状态页（访客）**：`/`（根路径）。由后台「设置 → 公开与首页」开关控制是否开放；开放后游客可见脱敏数据。支持可插拔的**第三方皮肤**——把皮肤放到 `public/themes/<id>/`（带 `manifest.json`），在「设置 → 皮肤模板」选择即可，首页即生效。皮肤通过免登录的 `/api/public/*` 取数。详见 `server/public/themes/README.md`。
+- **后台管理（管理员）**：`/admin.html`。需管理员 Token（+ 可选 TOTP）登录，含仪表盘、客户端、设置等。
+- **Komari 社区皮肤兼容**：后端已实现 **Komari 兼容 API 层（PoC）**，把本机数据映射成 Komari 主题所期望的 `{status,message,data}` 结构与 `WebSocket /api/clients` 实时推送。将 Komari 社区皮肤的前端请求层指向本服务（必要时仅调整资源路径为 `/themes/<id>/...`）即可运行；自带适配示例 `server/public/themes/komari-demo/`。
+
 ## 安全设计
 
 1. **受控端零入站** —— 只做出站上报。

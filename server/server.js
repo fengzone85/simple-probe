@@ -4,6 +4,7 @@ const fs = require('fs');
 const express = require('express');
 const db = require('./src/db');
 const api = require('./src/api');
+const komari = require('./src/komari');
 const alerts = require('./src/alerts');
 const { safeEqual } = require('./src/auth');
 
@@ -86,6 +87,8 @@ app.get('/metrics', (req, res) => {
 });
 
 app.use('/api', api);
+// Komari 兼容 API 层：让 Komari 社区皮肤可指向本服务（只读、脱敏，受 public_enabled 约束）
+app.use('/api', komari.router);
 
 // 公开状态页（首页 /）：支持第三方主题皮肤
 // 若 ui_settings.public_theme 指向 public/themes/<id> 下的皮肤，则投放该皮肤首页；
@@ -147,7 +150,24 @@ setInterval(() => {
 }, 3600 * 1000);
 
 const PORT = Number(process.env.PORT || 8080);
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[monitor] server listening on :${PORT}`);
   alerts.start();
 });
+
+// Komari 兼容 WebSocket：主题通过 ws://host/api/clients 发送 "get" 获取实时快照。
+// 依赖 ws 包；若未安装则降级（REST 兼容接口 /api/public、/api/nodes、/api/recent 仍可用）。
+try {
+  const { WebSocketServer } = require('ws');
+  const wss = new WebSocketServer({ server, path: '/api/clients' });
+  wss.on('connection', (ws) => {
+    const send = () => { try { ws.send(JSON.stringify(komari.snapshot())); } catch (_) {} };
+    send();
+    ws.on('message', () => send()); // Komari 客户端发送 "get" 触发刷新
+    const timer = setInterval(send, 5000);
+    ws.on('close', () => clearInterval(timer));
+  });
+  console.log('[monitor] Komari-compat WebSocket /api/clients enabled');
+} catch (e) {
+  console.warn('[monitor] Komari-compat WebSocket 未启用（缺少 ws 包，仅 REST 兼容可用）：', e.message);
+}

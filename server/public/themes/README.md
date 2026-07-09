@@ -46,13 +46,28 @@ public/themes/<id>/
 
 > 若 `public_enabled = false`，上述接口返回 `403`，皮肤应展示「暂未开放」之类提示。
 
+## Komari 兼容 API（可选，供 Komari 社区皮肤复用）
+
+后端已实现一套 **Komari 兼容 API 层（PoC）**：把本机数据映射成 Komari 主题所期望的 `{status,message,data}` 结构与同构字段，并兼容 Komari 主题的实时通道。同样受 `public_enabled` 开关控制（关闭时返回 `403` / 空快照）。
+
+| 接口                          | 对应 Komari 行为                                    |
+| ----------------------------- | --------------------------------------------------- |
+| `GET /api/public`             | 站点公开属性（sitename / description / theme 等）    |
+| `GET /api/version`            | 版本信息                                            |
+| `GET /api/nodes`              | 节点基础信息列表（uuid / name / group / region 等） |
+| `GET /api/recent/:uuid`       | 该节点最近实时指标（嵌套结构：`cpu.usage` / `ram.total` / `network.up` …）|
+| `WebSocket /api/clients`      | 发送 `get` 返回 `{data:{online:[...], data:{uuid:{...}}}}` 实时快照（需 `ws` 包，缺失时自动降级为上面三个 REST 接口轮询）|
+
+> 接入 Komari 社区皮肤时，只需将其前端请求层的 base URL 指向本服务、资源路径改为 `/themes/<id>/...`，即可复用。自带适配示例见 `komari-demo/`。
+
 ## 参考实现
 
-`demo/` 目录即为一个最小可运行皮肤（极简列表），可直接复制改造成你自己的皮肤。
+- `demo/`：最小可运行皮肤（极简列表），基于 `/api/public/*`，可直接复制改造。
+- `komari-demo/`：适配版 Komari 皮肤示例，基于上面的 Komari 兼容 API，证明 Komari 社区皮肤可在本项目运行。
 
 ## 关于复用 Komari 社区皮肤
 
-Komari 的皮肤是面向 **Komari 自有后端 API**（JSON-RPC2 / WebSocket，数据模型不同且无公开契约）开发的，无法在本项目直接运行。要在 simple-probe 上使用 Komari 社区皮肤，有两种路线：
+Komari 皮肤原本面向 **Komari 自有后端 API**（JSON-RPC2 / WebSocket，数据模型不同）开发。本项目已通过**兼容层**抹平差异：
 
-1. **适配路线（推荐）**：以本契约（`/api/public/*`）为基准改写皮肤的前端请求层——结构改动小、长期可控；
-2. **兼容层路线**：在后端额外实现一套「Komari 兼容 API」把本机数据映射成 Komari 格式，从而直接挂载 Komari 皮肤（工作量较大、依赖 Komari 接口细节）。
+1. **兼容层（已实现，推荐先试）**：后端把本机数据映射成 Komari 格式并暴露 `/api/public`、`/api/nodes`、`/api/recent/:uuid`、`WebSocket /api/clients`，Komari 社区皮肤的前端请求层只需改 base URL 与资源路径（`/themes/<id>/...`）即可直接挂载。示例见 `komari-demo/`。
+2. **适配路线**：若你只想用本项目原生契约，也可基于 `/api/public/*` 改写皮肤请求层（结构更轻、长期可控）。
