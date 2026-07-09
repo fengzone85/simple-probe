@@ -134,8 +134,10 @@ router.get('/nodes', guard, (req, res) => {
   res.json({ status: 'success', message: '', data: agents.map(toNode) });
 });
 
-// GET /api/recent/:uuid —— 最近 1 分钟历史（取最新一条，嵌套结构）
-router.get('/recent/:uuid', guard, (req, res) => {
+// GET /api/recent/:uuid —— 最近实时指标（取最新一条，嵌套结构）。
+// :uuid 可省略：省略时返回空数组（避免 /api/recent/ 触发 404，便于调试）。
+router.get('/recent/:uuid?', guard, (req, res) => {
+  if (!req.params.uuid) return res.json({ status: 'success', message: '', data: [] });
   const a = db.getAgent(req.params.uuid);
   if (!a) return res.json({ status: 'success', message: '', data: [] });
   const rt = toRealtime(db.getLatestMetric(a.id));

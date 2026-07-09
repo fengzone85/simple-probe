@@ -5,6 +5,9 @@
 //   - GET  /api/nodes        节点元数据（名称/分组/地区/配额）
 //   - GET  /api/recent/:uuid 单节点最近实时指标（嵌套结构）
 //   - WS   /api/clients      实时快照（与 Komari 主题对接；优先使用，未装 ws 时降级轮询）
+//
+// Komari WS 快照结构：{ data: { online: [uuid...], data: { uuid: {...} } } }
+// 注意实时映射在 msg.data.data，而非 msg.data。
 const $ = (id) => document.getElementById(id);
 const nodes = new Map(); // uuid -> node meta
 
@@ -24,16 +27,19 @@ function pct(used, total) {
   return total > 0 ? Math.min(100, (used / total) * 100) : 0;
 }
 function barClass(p) { return p >= 90 ? 'crit' : p >= 75 ? 'warn' : ''; }
+function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])); }
 
-function render(nodesMeta, realtime) {
-  // nodesMeta: array of node meta (from /api/nodes); realtime: {uuid: {...}} 或 null（仅用 meta）
+// nodesMeta: 节点元数据数组（来自 /api/nodes）
+// realtime:  { uuid: 实时对象 } 或 null（仅用 meta）
+// onlineSet: Set<uuid> 或 null（在线集合；null 时以「有无实时数据」判断在线）
+function render(nodesMeta, realtime, onlineSet) {
   const list = $('list');
   if (!nodesMeta || !nodesMeta.length) { list.innerHTML = '<div class="card">暂无数据</div>'; return; }
   let online = 0;
   list.innerHTML = nodesMeta.map((nm) => {
     const rt = realtime ? realtime[nm.uuid] : null;
-    const off = !rt;
-    if (rt) online++;
+    const isOn = onlineSet ? onlineSet.has(nm.uuid) : !!rt;
+    if (isOn) online++;
     const cpu = rt ? rt.cpu.usage : 0;
     const memP = rt ? pct(rt.ram.used, rt.ram.total) : 0;
     const diskP = rt ? pct(rt.disk.used, rt.disk.total) : 0;
@@ -41,13 +47,7 @@ function render(nodesMeta, realtime) {
     const down = rt ? fmtRate(rt.network.down) : '—';
     const totalTraffic = rt ? fmtBytes((rt.network.totalUp || 0) + (rt.network.totalDown || 0)) : '—';
     const uptime = rt ? fmtUptime(rt.uptime) : '—';
-    return `<div class="card ${off ? 'off' : ''}">
-      <div class="top">
-        <span class="dot"></span>
-        <span class="flag">${nm.region || ''}</span>
-        <span class="nm">${esc(nm.name)}</span>
-        <span class="grp">${esc(nm.group || '')}</span>
-      </div>
+    const body = rt ? `
       <div class="row"><span>CPU</span><b>${cpu.toFixed(1)}%</b></div>
       <div class="bar ${barClass(cpu)}"><i style="width:${cpu}%"></i></div>
       <div class="row"><span>内存</span><b>${memP.toFixed(1)}%</b></div>
@@ -57,13 +57,20 @@ function render(nodesMeta, realtime) {
       <div class="meta">
         <span>↑${up} ↓${down}</span>
         <span>流量 ${totalTraffic}</span>
-        <span>在线 ${uptime}</span>
+        <span>在线 ${isOn ? uptime : '离线'}</span>
+      </div>` : `<div class="row"><span>状态</span><b>暂无数据</b></div>`;
+    return `<div class="card ${isOn ? '' : 'off'}">
+      <div class="top">
+        <span class="dot"></span>
+        <span class="flag">${nm.region || ''}</span>
+        <span class="nm">${esc(nm.name)}</span>
+        <span class="grp">${esc(nm.group || '')}</span>
       </div>
+      ${body}
     </div>`;
   }).join('');
   if ($('ov')) $('ov').textContent = `在线 ${online} / 共 ${nodesMeta.length} 台`;
 }
-function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])); }
 
 async function loadMeta() {
   try {
@@ -86,20 +93,21 @@ async function poll() {
       if (arr.length) realtime[nm.uuid] = arr[arr.length - 1];
     } catch (e) {}
   }));
-  render(meta, realtime);
+  render(meta, realtime, null);
 }
 
-// WebSocket 路径（与 Komari 主题一致）
+// WebSocket 路径（与 Komari 主题一致）：{ data: { online: [...], data: { uuid: {...} } } }
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/api/clients`);
-  let metaReady = loadMeta().then(m => { if (!window.__rendered) render(m, null); });
+  const metaReady = loadMeta().then(m => { if (!window.__rendered) render(m, null, null); });
   ws.onmessage = async (ev) => {
     try {
       const msg = JSON.parse(ev.data);
       const snap = (msg && msg.data) || {};
       const meta = (await metaReady) || [];
-      render(meta, snap.data || {});
+      // 实时映射在 snap.data.data；在线集合在 snap.data.online
+      render(meta, (snap.data && snap.data.data) || {}, snap.online ? new Set(snap.online) : null);
       window.__rendered = true;
     } catch (e) {}
   };
