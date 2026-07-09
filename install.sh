@@ -415,10 +415,16 @@ update_agent() {
 # ── 状态 / 卸载 ────────────────────────────────────────────────────────────────
 status_all() {
     echo "== 服务端 (Docker) =="
+    local running=0 installed=0
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q simple-probe-server; then
+        running=1
         docker ps --filter name=simple-probe-server --format '  {{.Names}}  {{.Status}}'
-    else
-        echo "  未运行（或服务端未安装）"
+    fi
+    [[ -d "$SRC_DIR/server" ]] && installed=1
+    if [[ $running -eq 0 && $installed -eq 1 ]]; then
+        echo "  已安装但未运行 → 可选「5) 更新服务端」重建启动，或: docker compose -C $SRC_DIR/server up -d"
+    elif [[ $running -eq 0 && $installed -eq 0 ]]; then
+        echo "  未安装 → 请先「1) 安装服务端」"
     fi
     echo "== 受控端 (systemd) =="
     if systemctl list-unit-files simple-probe-agent.service >/dev/null 2>&1; then
