@@ -175,6 +175,21 @@ function fmtUptime(s) {
   return d > 0 ? `${d}天${h}时` : `${h}时${Math.floor((s%3600)/60)}分`;
 }
 function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function copyText(id) {
+  const el = $(id); if (!el) return;
+  const text = el.textContent;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板')).catch(() => fallbackCopy(text));
+  } else { fallbackCopy(text); }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast('已复制到剪贴板'); }
+  catch (e) { toast('复制失败，请手动选择文本'); }
+  document.body.removeChild(ta);
+}
 
 // ---------- detail ----------
 async function openDetail(id) {
@@ -293,8 +308,25 @@ async function submitCreate() {
         note: $('c_note').value.trim()
       })
     });
-    $('createResult').innerHTML = `<div class="token-show">AGENT_ID: ${r.id}<br>AGENT_TOKEN: ${r.token}<br><br>请将以上写入受控端 docker run 的环境变量。</div>`;
-    toast('创建成功，请复制 Token');
+    const inst = r.install || {};
+    $('createResult').innerHTML = `
+      <div class="token-show">AGENT_ID: ${r.id}<br>AGENT_TOKEN: ${r.token}</div>
+      <p class="hint">在被控端服务器粘贴下面任一条命令即可完成接入（二选一）：</p>
+      <div class="install-cmds" id="installCmds">
+        <div class="tabs">
+          <button class="btn ghost sm active" data-tab="native">原生版（systemd）</button>
+          <button class="btn ghost sm" data-tab="docker">Docker 版</button>
+        </div>
+        <div class="tab-pane" data-pane="native">
+          <pre class="cmd" id="cmdNative">${esc(inst.native_cmd || '')}</pre>
+          <button class="btn sm" data-copy="cmdNative">复制原生版命令</button>
+        </div>
+        <div class="tab-pane" data-pane="docker" style="display:none">
+          <pre class="cmd" id="cmdDocker">${esc(inst.docker_cmd || '')}</pre>
+          <button class="btn sm" data-copy="cmdDocker">复制 Docker 版命令</button>
+        </div>
+      </div>`;
+    toast('创建成功，请复制安装命令');
     refresh();
   } catch (e) { toast('创建失败：' + e.message); }
 }
@@ -387,7 +419,17 @@ function bindEvents() {
       const cid = closeEl.getAttribute('data-close');
       closeModal(cid);
       if (cid === 'detailModal') stopLiveTraffic();
+      return;
     }
+    const tab = e.target.closest('[data-tab]');
+    if (tab) {
+      const t = tab.getAttribute('data-tab');
+      document.querySelectorAll('#installCmds [data-tab]').forEach(b => b.classList.toggle('active', b === tab));
+      document.querySelectorAll('#installCmds [data-pane]').forEach(p => { p.style.display = (p.getAttribute('data-pane') === t) ? '' : 'none'; });
+      return;
+    }
+    const cp = e.target.closest('[data-copy]');
+    if (cp) { copyText(cp.getAttribute('data-copy')); }
   });
 }
 

@@ -28,6 +28,33 @@ router.use(rateLimit);
 // ---- helpers ----
 const { num, str, validateReport } = require('./validate');
 
+// ---- 一键安装命令生成（Nezha 风格：服务端把地址 + 每客户端令牌预填进命令）----
+// 两条接入路径：① 原生版（systemd + Python，install.sh 自举下载配套文件）；
+// ② Docker 版（现场从源码 git 构建镜像并运行，无需任何仓库账号）。
+// 仓库 raw 基址（install.sh 位于根，agent 载荷位于 <base>/agent/）；可用 AGENT_RAW_REPO 覆盖。
+const REPO_BASE = (process.env.AGENT_RAW_REPO || 'https://raw.githubusercontent.com/fengzone85/simple-probe/master').replace(/\/+$/, '');
+const AGENT_GIT_REPO = process.env.AGENT_GIT_REPO || 'https://github.com/fengzone85/simple-probe.git#master:agent';
+const AGENT_INTERVAL_DEFAULT = Number(process.env.AGENT_INTERVAL || 15);
+
+// 受控端接入用的服务端公网地址：优先用 PUBLIC_URL 显式配置（对应 Nezha 的「对接地址」），
+// 否则从请求头自动推导（Nginx 已设 X-Forwarded-Proto / Host）。
+function getPublicBaseUrl(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, '');
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim() || 'https';
+  const host = req.get('host');
+  if (!host) return 'http://localhost:8080';
+  return `${proto}://${host}`;
+}
+
+// Nezha 风格：一条命令搞定对接。原生版走根 install.sh（自动拉取 agent 载荷并装 systemd）；
+// Docker 版现场从源码 git 构建镜像并运行，无需任何仓库账号。
+function buildInstallCommands(serverUrl, agentId, agentToken, interval) {
+  const iv = interval || AGENT_INTERVAL_DEFAULT;
+  const native = `curl -fsSL ${REPO_BASE}/install.sh | sudo bash -s -- --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id ${agentId} --token ${agentToken} --interval ${iv}`;
+  const docker = `docker build -t simple-probe-agent ${AGENT_GIT_REPO} \\\n  && docker run -d --name simple-probe-agent --restart unless-stopped \\\n     -e SERVER_URL=${serverUrl} -e AGENT_ID=${agentId} -e AGENT_TOKEN=${agentToken} -e INTERVAL=${iv} \\\n     -v simple-probe-state:/data \\\n     simple-probe-agent`;
+  return { server_url: serverUrl, native_cmd: native, docker_cmd: docker };
+}
+
 // ---- Agent report (push) ----
 router.post('/report', agentAuth, (req, res) => {
   const m = validateReport(req.body);
@@ -130,7 +157,9 @@ router.post('/agents', adminOnly, (req, res) => {
     expire_at: str(req.body.expire_at, 40),
     monthly_quota_gb: req.body.monthly_quota_gb
   });
-  res.json({ id, token });
+  // 创建时一次性把「地址 + 该客户端令牌」预填进两条一键命令返回（令牌仅此刻明文可用）。
+  const install = buildInstallCommands(getPublicBaseUrl(req), id, token, AGENT_INTERVAL_DEFAULT);
+  res.json({ id, token, install });
 });
 
 // ---- Admin: update agent metadata ----

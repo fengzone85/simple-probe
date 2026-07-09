@@ -11,6 +11,9 @@ services:
       - DB_PATH=/data/monitor.db
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - AGENT_INTERVAL=15
+      - PUBLIC_URL=${PUBLIC_URL:-}
+      - AGENT_RAW_REPO=${AGENT_RAW_REPO:-}
+      - AGENT_GIT_REPO=${AGENT_GIT_REPO:-}
       - OFFLINE_THRESHOLD_SEC=60
       - RETENTION_DAYS=30
       - ALERT_CPU_PCT=90

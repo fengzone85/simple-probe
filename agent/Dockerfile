@@ -1,21 +1,17 @@
-FROM python:3.12-slim
+# Simple Probe Agent — 极简镜像（仅依赖 Python 标准库，无需 pip 安装）
+FROM python:3.11-slim
 WORKDIR /app
+COPY agent.py collector.py ./
 
-# non-root user for reduced attack surface (reads /proc as any user)
-RUN useradd -m -u 10001 monitor
-
-# iputils-ping 提供 ICMP 探测能力；其 /bin/ping 自带 cap_net_raw，
-# 故以 monitor 非 root 用户亦可执行。若镜像无 ping，探测自动回退到 TCP，不影响运行。
-RUN apt-get update && apt-get install -y iputils-ping && rm -rf /var/lib/apt/lists/*
-
-COPY collector.py agent.py ./
-RUN mkdir -p /data && chown -R monitor:monitor /data /app
-USER monitor
-ENV INTERVAL=15 \
-    SERVER_URL= \
-    AGENT_ID= \
-    AGENT_TOKEN= \
+# 运行环境变量（由 docker run -e 注入；默认值仅作占位，启动前必须设置）
+ENV SERVER_URL="" \
+    AGENT_ID="" \
+    AGENT_TOKEN="" \
+    INTERVAL=15 \
     DISK_PATH=/ \
-    STATE_FILE=/data/state.json
-VOLUME ["/data"]
+    STATE_FILE=/data/state.json \
+    PROBE_TARGETS="移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8"
+
+# 月度流量计数状态落盘（建议挂卷持久化）
+RUN mkdir -p /data
 CMD ["python", "agent.py"]

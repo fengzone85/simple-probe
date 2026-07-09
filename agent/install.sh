@@ -14,6 +14,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 INTERVAL=15
+REPO="https://raw.githubusercontent.com/fengzone85/simple-probe/master/agent"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
@@ -30,6 +31,8 @@ Required (interactive if not given):
   --setup-token SECRET  One-click register with server SETUP_TOKEN (no need for --id/--token)
   --setup-name NAME     Node display name for self-registration (optional)
   --interval SECONDS    Report interval in seconds (default: 15)
+  --install-agent       （兼容一键命令语义标记；本脚本即受控端安装，忽略即可）
+  --repo BASE_URL       Raw 仓库地址（agent.py 等配套文件来源，默认 master 分支）
 
 Examples:
   # Interactive (prompts for token silently)
@@ -53,6 +56,10 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             INTERVAL="$2"; shift 2 ;;
+        --repo)
+            REPO="$2"; shift 2 ;;
+        --install-agent)
+            shift ;;   # 兼容一键命令的语义标记；本脚本即受控端安装，忽略即可
         --token-file)
             AGENT_TOKEN_FILE="$2"; shift 2 ;;
         --setup-token)
@@ -234,6 +241,21 @@ fi
 mkdir -p /opt/simple-probe
 mkdir -p /var/lib/simple-probe
 mkdir -p /etc/simple-probe
+
+# ── 6b. 自举：经管道执行时同目录无 agent.py，从仓库下载配套文件 ──────────────
+if [[ ! -f "${SCRIPT_DIR}/agent.py" ]]; then
+    echo -e "${YELLOW}[信息] 同目录未找到 agent.py，将从 ${REPO} 下载配套文件…${NC}"
+    for f in agent.py collector.py uninstall.sh; do
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "${REPO}/$f" -o "${SCRIPT_DIR}/$f" || { echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2; exit 1; }
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO "${SCRIPT_DIR}/$f" "${REPO}/$f" || { echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2; exit 1; }
+        else
+            echo -e "${RED}[错误] 需要 curl 或 wget 才能下载配套文件${NC}" >&2; exit 1
+        fi
+    done
+    echo -e "${GREEN}[OK]   已下载 agent.py / collector.py / uninstall.sh${NC}"
+fi
 
 # ── 7. Copy agent files ──────────────────────────────────────────────────────
 cp "${SCRIPT_DIR}/agent.py"     /opt/simple-probe/agent.py
