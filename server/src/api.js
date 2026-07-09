@@ -50,7 +50,10 @@ function getPublicBaseUrl(req) {
 // Docker 版现场从源码 git 构建镜像并运行，无需任何仓库账号。
 function buildInstallCommands(serverUrl, agentId, agentToken, interval) {
   const iv = interval || AGENT_INTERVAL_DEFAULT;
-  const native = `curl -fsSL ${REPO_BASE}/install.sh | sudo bash -s -- --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id ${agentId} --token ${agentToken} --interval ${iv}`;
+  // 原生版采用 Komari 风格：先下载成文件、chmod +x、再 sudo 执行（相对 curl|bash 更透明、可审阅）。
+  const native = `curl -fsSL ${REPO_BASE}/install.sh -o install.sh
+chmod +x install.sh
+sudo ./install.sh --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id ${agentId} --token ${agentToken} --interval ${iv}`;
   const docker = `docker build -t simple-probe-agent ${AGENT_GIT_REPO} \\\n  && docker run -d --name simple-probe-agent --restart unless-stopped \\\n     -e SERVER_URL=${serverUrl} -e AGENT_ID=${agentId} -e AGENT_TOKEN=${agentToken} -e INTERVAL=${iv} \\\n     -v simple-probe-state:/data \\\n     simple-probe-agent`;
   return { server_url: serverUrl, native_cmd: native, docker_cmd: docker };
 }
