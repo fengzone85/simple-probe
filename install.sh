@@ -4,8 +4,10 @@
 #   借鉴 Nezha / Komari / Pulse 的「单文件下载 + 交互菜单 + 统一管理」范式
 # =============================================================================
 # 单条命令即可开始（建议在审查脚本后运行）：
-#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
-#   sudo bash install.sh
+#   # 最小化镜像可能未预装 curl，先安装（仅 Debian/Ubuntu 等 apt 系统需要）
+#   apt-get update && apt-get install -y curl
+#   # 一键拉取并运行（默认分支 master）
+#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh | bash
 #
 # 也可作为管理脚本重复运行（查看状态 / 卸载）。
 #
@@ -19,7 +21,7 @@
 set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/simple-probe/master}"
 REPO_GIT="${REPO_GIT:-https://github.com/fengzone85/simple-probe.git}"
 SRC_DIR="/opt/simple-probe-src"
@@ -154,28 +156,24 @@ ensure_deps() {
 
 # ── Docker 保障 ────────────────────────────────────────────────────────────────
 ensure_docker() {
-    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then
         return 0
     fi
     # 官方安装脚本依赖 curl，确保基础工具就绪
     command -v curl >/dev/null 2>&1 || ensure_deps || true
-    echo -e "${YELLOW}[信息] 未检测到可用的 Docker，开始安装…${NC}"
+    echo -e "${YELLOW}[信息] 未检测到可用的 Docker（含 compose/buildx），开始安装…${NC}"
 
     if command -v apt-get >/dev/null 2>&1; then
-        apt-get update -qq
-        # 先尝试系统源自带包（Ubuntu 等发行版的 docker.io 已含 compose 插件）
-        apt-get install -y docker.io >/dev/null 2>&1 || true
-        if ! docker compose version >/dev/null 2>&1; then
-            # Debian 13 等默认源缺 docker-compose-plugin：移除可能残缺的 docker.io，
-            # 改用 Docker 官方安装脚本，确保 docker 引擎与 compose 插件完整可用
-            echo -e "${YELLOW}[信息] 系统源缺少 compose 插件，改用 Docker 官方安装脚本…${NC}"
-            apt-get remove -y docker.io >/dev/null 2>&1 || true
-            curl -fsSL https://get.docker.com | sh
-        fi
+        # 部分基础镜像（如 Debian 13 trixie）会预装与 Docker 官方包冲突的
+        # docker.io / docker-buildx / containerd / runc：必须先移除，否则
+        # docker-buildx-plugin 因文件冲突无法安装，最终 compose build 会报
+        # 「requires buildx 0.17.0 or later」。
+        apt-get remove -y docker.io docker-buildx docker-compose containerd runc 2>/dev/null || true
+        curl -fsSL https://get.docker.com | sh
     elif command -v dnf >/dev/null 2>&1; then
-        dnf -y install docker-ce docker-ce-cli docker-compose-plugin
+        dnf -y install docker-ce docker-ce-cli docker-compose-plugin docker-buildx-plugin
     elif command -v yum >/dev/null 2>&1; then
-        yum -y install docker-ce docker-ce-cli docker-compose-plugin
+        yum -y install docker-ce docker-ce-cli docker-compose-plugin docker-buildx-plugin
     elif command -v apk >/dev/null 2>&1; then
         apk add --no-cache docker docker-cli-compose
     else
@@ -185,10 +183,19 @@ ensure_docker() {
 
     systemctl enable --now docker 2>/dev/null || true
 
-    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    # 兜底：buildx 偶发未装上时显式补装（需先移除 Debian 自带的 docker-buildx）
+    if ! docker buildx version >/dev/null 2>&1; then
+        apt-get remove -y docker-buildx 2>/dev/null || true
+        ( command -v apt-get >/dev/null 2>&1 && apt-get install -y docker-buildx-plugin ) \
+          || ( command -v dnf     >/dev/null 2>&1 && dnf -y install docker-buildx-plugin ) \
+          || ( command -v yum     >/dev/null 2>&1 && yum -y install docker-buildx-plugin ) \
+          || true
+    fi
+
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then
         return 0
     fi
-    echo -e "${RED}[错误] Docker 安装失败，请手动安装 Docker 与 compose 插件后重试${NC}" >&2
+    echo -e "${RED}[错误] Docker 安装失败，请手动安装 Docker 与 compose / buildx 插件后重试${NC}" >&2
     return 1
 }
 

@@ -7,9 +7,13 @@
 **一键部署（推荐）**：仓库根目录提供统一 `install.sh`（借鉴 Nezha / Komari / Pulse 的「单文件下载 + 交互菜单」范式），一条命令即可完成**服务端 + 受控端**的安装、状态查看与卸载：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/install.sh -o install.sh
-sudo bash install.sh          # 显示菜单：装服务端 / 装受控端 / 状态 / 卸载
+# 1) 最小化镜像（如 Debian 13）可能未预装 curl，先安装（仅 apt 系系统需要；已装可跳过）
+apt-get update && apt-get install -y curl
+# 2) 一键拉取并运行安装脚本（默认分支 master）
+curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh | bash
 ```
+
+> 若系统已自带 curl，可直接执行第 2 步。脚本会自动安装 Docker（含 compose / buildx 插件，已兼容 Debian 13 预装冲突包）、git 等依赖。
 
 非交互（CI / 批量）用法见 `sudo bash install.sh --help`。受控端支持两种模式：
 - **手动**：在后台「新建客户端」拿到 `AGENT_ID`/`AGENT_TOKEN` 后填入；

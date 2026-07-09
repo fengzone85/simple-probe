@@ -111,7 +111,7 @@ Agent **只发起出站 HTTPS 请求**到 `SERVER_URL/api/report`，不在本机
 
 ```bash
 # 1. 下载（不改名，保留 .sh 方便后续卸载）
-curl -o install.sh https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/install.sh
+curl -o install.sh https://raw.githubusercontent.com/fengzone85/simple-probe/master/agent/install.sh
 
 # 2. 审查脚本（强烈建议）
 cat install.sh
