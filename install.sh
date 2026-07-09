@@ -4,7 +4,7 @@
 #   借鉴 Nezha / Komari / Pulse 的「单文件下载 + 交互菜单 + 统一管理」范式
 # =============================================================================
 # 单条命令即可开始（建议在审查脚本后运行）：
-#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
 #   sudo bash install.sh
 #
 # 也可作为管理脚本重复运行（查看状态 / 卸载）。
@@ -20,7 +20,7 @@ set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/simple-probe/main}"
+REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/simple-probe/master}"
 REPO_GIT="${REPO_GIT:-https://github.com/fengzone85/simple-probe.git}"
 SRC_DIR="/opt/simple-probe-src"
 
@@ -60,7 +60,7 @@ Simple Probe 一键部署脚本
   --setup-token SECRET    用服务端 SETUP_TOKEN 自助注册（免 --id/--token）
   --setup-name NAME       自助注册的节点显示名（可选）
   --interval SEC          上报间隔（秒，默认 15）
-  --repo URL              自定义 raw 仓库地址（默认本项目 main 分支）
+  --repo URL              自定义 raw 仓库地址（默认本项目 master 分支）
 EOF
 }
 
@@ -95,6 +95,7 @@ download() {
 
 # ── 受控端安装 ─────────────────────────────────────────────────────────────────
 install_agent() {
+    ensure_deps || exit 1
     local args=()
     [[ -n "$A_SERVER" ]]     && args+=(--server "$A_SERVER")
     [[ -n "$A_ID" ]]         && args+=(--id "$A_ID")
@@ -125,14 +126,52 @@ install_agent() {
     rm -rf "$tmp"
 }
 
+# ── 基础工具保障（curl / git 等一键流程前置依赖）─────────────────────────────────
+ensure_deps() {
+    local missing=()
+    for t in curl git; do
+        command -v "$t" >/dev/null 2>&1 || missing+=("$t")
+    done
+    [[ ${#missing[@]} -eq 0 ]] && return 0
+    echo -e "${YELLOW}[信息] 缺少基础工具 ${missing[*]}，尝试安装…${NC}"
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -qq && apt-get install -y "${missing[@]}"
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf -y install "${missing[@]}"
+    elif command -v yum >/dev/null 2>&1; then
+        yum -y install "${missing[@]}"
+    elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache "${missing[@]}"
+    else
+        echo -e "${RED}[错误] 无法安装基础工具 ${missing[*]}，请手动安装后重试${NC}" >&2
+        return 1
+    fi
+    for t in "${missing[@]}"; do
+        command -v "$t" >/dev/null 2>&1 || { echo -e "${RED}[错误] ${t} 安装失败${NC}" >&2; return 1; }
+    done
+    return 0
+}
+
 # ── Docker 保障 ────────────────────────────────────────────────────────────────
 ensure_docker() {
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
         return 0
     fi
-    echo -e "${YELLOW}[信息] 未检测到 Docker，尝试安装…${NC}"
+    # 官方安装脚本依赖 curl，确保基础工具就绪
+    command -v curl >/dev/null 2>&1 || ensure_deps || true
+    echo -e "${YELLOW}[信息] 未检测到可用的 Docker，开始安装…${NC}"
+
     if command -v apt-get >/dev/null 2>&1; then
-        apt-get update -qq && apt-get install -y docker.io docker-compose-plugin
+        apt-get update -qq
+        # 先尝试系统源自带包（Ubuntu 等发行版的 docker.io 已含 compose 插件）
+        apt-get install -y docker.io >/dev/null 2>&1 || true
+        if ! docker compose version >/dev/null 2>&1; then
+            # Debian 13 等默认源缺 docker-compose-plugin：移除可能残缺的 docker.io，
+            # 改用 Docker 官方安装脚本，确保 docker 引擎与 compose 插件完整可用
+            echo -e "${YELLOW}[信息] 系统源缺少 compose 插件，改用 Docker 官方安装脚本…${NC}"
+            apt-get remove -y docker.io >/dev/null 2>&1 || true
+            curl -fsSL https://get.docker.com | sh
+        fi
     elif command -v dnf >/dev/null 2>&1; then
         dnf -y install docker-ce docker-ce-cli docker-compose-plugin
     elif command -v yum >/dev/null 2>&1; then
@@ -143,15 +182,35 @@ ensure_docker() {
         echo -e "${YELLOW}[警告] 无法用包管理器安装 Docker，回退到官方安装脚本（第三方）${NC}"
         curl -fsSL https://get.docker.com | sh
     fi
+
     systemctl enable --now docker 2>/dev/null || true
+
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        return 0
+    fi
+    echo -e "${RED}[错误] Docker 安装失败，请手动安装 Docker 与 compose 插件后重试${NC}" >&2
+    return 1
 }
 
 # ── 服务端安装 ─────────────────────────────────────────────────────────────────
 install_server() {
+    ensure_deps || exit 1
     ensure_docker || exit 1
 
     if ! command -v git >/dev/null 2>&1; then
-        echo -e "${RED}[错误] 需要 git 才能拉取服务端源码${NC}" >&2
+        echo -e "${YELLOW}[信息] 未检测到 git，尝试安装…${NC}"
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y git
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf -y install git
+        elif command -v yum >/dev/null 2>&1; then
+            yum -y install git
+        elif command -v apk >/dev/null 2>&1; then
+            apk add --no-cache git
+        fi
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "${RED}[错误] 需要 git 才能拉取服务端源码（且无法自动安装）${NC}" >&2
         exit 1
     fi
 
