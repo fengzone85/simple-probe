@@ -416,9 +416,11 @@ update_agent() {
 status_all() {
     echo "== 服务端 (Docker) =="
     local running=0 installed=0
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q simple-probe-server; then
+    # 直接用 compose 项目识别运行中的容器，避免默认容器名（server-server-1）
+    # 与硬编码名（simple-probe-server）不符导致「明明在跑却误报未运行」
+    if docker compose -C "$SRC_DIR/server" ps --filter status=running -q 2>/dev/null | grep -q .; then
         running=1
-        docker ps --filter name=simple-probe-server --format '  {{.Names}}  {{.Status}}'
+        docker compose -C "$SRC_DIR/server" ps --format '  {{.Name}}  {{.Status}}'
     fi
     [[ -d "$SRC_DIR/server" ]] && installed=1
     if [[ $running -eq 0 && $installed -eq 1 ]]; then
