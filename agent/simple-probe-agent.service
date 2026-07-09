@@ -1,0 +1,38 @@
+[Unit]
+Description=Simple Probe Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=simple-probe
+Group=simple-probe
+EnvironmentFile=/etc/simple-probe/agent.env
+ExecStart=/usr/bin/python3 /opt/simple-probe/agent.py
+WorkingDirectory=/opt/simple-probe
+SyslogIdentifier=simple-probe-agent
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=10s
+
+# ── Security hardening ────────────────────────────────────────────────────────
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/simple-probe
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+ProtectControlGroups=true
+LockPersonality=true
+# AF_ prefixed names are supported by all systemd versions (e.g. Debian 12 = 252).
+# The short forms "inet/inet6/unix" only work on systemd >= 254 and are silently
+# ignored (with a journal warning that drops the whole restriction) on older ones.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target
