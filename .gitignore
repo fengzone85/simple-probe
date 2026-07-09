@@ -11,4 +11,7 @@ __pycache__/
 .codebuddy/
 # 本地运维/排查临时脚本（plink 调用、续期 dry-run、nginx 配置副本等），不入库
 .vps_test/
+# 服务运行日志（server 进程实时生成，非源码）
+*.err
+server/run.log
 
