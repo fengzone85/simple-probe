@@ -5,6 +5,7 @@ data/
 .env
 __pycache__/
 *.pyc
+*.db
 # 本助手内部数据，不应进入仓库
 .workbuddy/
 .codebuddy/
