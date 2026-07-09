@@ -107,3 +107,9 @@ Tailscale 流量经其 DERP 中继或 P2P，依赖**出站** UDP（及到 `derp.
 | 额外依赖 | Cloudflare 账号 | Tailscale 账号（免费版够用） |
 
 **无论选哪个，都请保留**：强 admin token、agent 独立 token、Nginx 限流、TLS。隧道只是"藏起源站 IP"，认证与授权仍是你自己兜底。
+
+## 更新服务端（不影响隧道）
+
+服务端更新请见 `README.md` 的「更新」章节（`sudo bash install.sh --update-server`）。该命令只重建 server 容器，**Nginx 反代与隧道配置（Cloudflared / Tailscale）均不受影响**，更新后外部访问方式（域名 / Magic DNS）保持不变，无需重新配置隧道。
+
+> 若更新后发现访问异常，通常是 server 容器刚重建、Node 还在冷启动（约数秒），稍等再刷新即可；隧道本身不会因更新而中断。

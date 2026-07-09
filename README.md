@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/inst
 
 > 若系统已自带 curl，可直接执行第 2 步。脚本会自动安装 Docker（含 compose / buildx 插件，已兼容 Debian 13 预装冲突包）、git 等依赖。
 
-非交互（CI / 批量）用法见 `sudo bash install.sh --help`。受控端支持两种模式：
+非交互（CI / 批量）用法见 `sudo bash install.sh --help`；后续版本更新（脚本 / 服务端 / 受控端）见文末「更新」章节。受控端支持两种模式：
 - **手动**：在后台「新建客户端」拿到 `AGENT_ID`/`AGENT_TOKEN` 后填入；
 - **一键自助注册**：服务端配置 `SETUP_TOKEN` 后，受控端只需 `--server URL --setup-token <SECRET>` 即自动建客户端并运行（仍只上报指标，无指令通道）。
 
@@ -361,6 +361,51 @@ docker run -d --name monitor-agent --restart unless-stopped \
 > `host-monitor-agent` 镜像需先在受控端构建：进入 `agent/` 目录 `docker build -t host-monitor-agent .`，或推送至私有/公有镜像仓库后 `docker pull`。
 
 3. 仪表盘即出现该客户端卡片，实时刷新 CPU/内存/硬盘/流量/负载，并可编辑**商家、备注、到期时间、月流量配额**。
+
+## 更新
+
+所有组件都可通过仓库根目录的 `install.sh` 一键更新，**无需手动拉取源码或重建容器**。`sudo bash install.sh` 进入交互菜单后，也可逐项选择下列更新项。
+
+### 1. 更新安装脚本（install.sh 自身）
+
+```bash
+sudo bash install.sh --update-script
+```
+
+从 GitHub 拉取最新 `install.sh` 覆盖当前脚本（或落到 `/usr/local/bin/simple-probe-install.sh`）。建议每次更新服务端/受控端前先更新本脚本，以搭载最新的安装/更新逻辑。
+
+### 2. 更新服务端（拉取最新源码 + 重建容器）
+
+```bash
+sudo bash install.sh --update-server
+```
+
+- **git 安装**：自动 `fetch + reset --hard origin/master`，同步到最新源码并重建容器；
+- **早期手动拷贝部署（无 `.git`）**：自动 `git init` 并跟踪 `master`，后续走同一路径；
+- **配置安全保留**：`.env`（含 `ADMIN_TOKEN`/`SETUP_TOKEN`/`PUBLIC_URL` 等）是未跟踪文件，更新**不会被覆盖**；
+- **数据不丢**：历史指标存于 Docker 卷，重建容器不会清空。
+
+> 隐藏源站 IP（Cloudflare Tunnel / Tailscale）场景下更新服务端同样适用，Nginx 反代与隧道配置不受影响，详见 [`TUNNEL-GUIDE.md`](TUNNEL-GUIDE.md)。
+
+### 3. 更新受控端（拉取最新 agent 代码）
+
+在被控端机器上执行：
+
+```bash
+sudo bash install.sh --update-agent
+```
+
+- 自动读取已存的 `/etc/simple-probe/agent.env` 身份（`SERVER_URL`/`AGENT_ID`/`AGENT_TOKEN`/`INTERVAL`），**无需重新输入令牌**；
+- 强制从 GitHub 拉取最新 `agent.py`/`collector.py` 等代码并覆盖重装、重启服务；
+- 若尚未安装受控端，会给出明确提示，请先「安装受控端」。
+
+### 更新矩阵
+
+| 目标 | 命令 | 是否需要令牌 |
+|------|------|------------|
+| 安装脚本 | `sudo bash install.sh --update-script` | 否 |
+| 服务端 | `sudo bash install.sh --update-server` | 否（自动 git 同步） |
+| 受控端 | `sudo bash install.sh --update-agent` | 否（复用已存 `agent.env`） |
 
 ## 环境变量
 
