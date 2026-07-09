@@ -315,6 +315,11 @@ update_script() {
     if ! download "$REPO_RAW/install.sh" "$new"; then
         echo -e "${RED}[错误] 下载 install.sh 失败${NC}" >&2; rm -f "$new"; return 1
     fi
+    # 安全闸：下载到的脚本若语法校验不通过，绝不覆盖当前可用脚本
+    if ! bash -n "$new" >/dev/null 2>&1; then
+        echo -e "${RED}[错误] 下载到的 install.sh 语法校验未通过，已放弃覆盖，当前脚本保持不变${NC}" >&2
+        rm -f "$new"; return 1
+    fi
     local target
     if [[ -f "$0" && -w "$(dirname "$0")" ]]; then
         target="$(realpath "$0")"
