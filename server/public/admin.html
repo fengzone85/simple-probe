@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>自托管监控 · Host Monitor</title>
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=9" />
   <style id="customCss"></style>
   <script src="vendor/echarts.min.js"></script>
 </head>
@@ -226,6 +226,11 @@
           <div class="lt"><span class="lt-l">↑ 上行</span><span class="lt-v" id="ltTx">—</span></div>
           <div class="lt-hint">实时速率 · 每 3 秒刷新</div>
         </div>
+        <div class="panel-actions" id="panelActions">
+          <button class="btn ghost sm" id="panelEdit">✏️ 编辑信息</button>
+          <button class="btn ghost sm" id="panelReset">🔑 重置 Token</button>
+          <button class="btn danger sm" id="panelDelete">🗑️ 删除节点</button>
+        </div>
         <div class="charts">
           <div class="chart"><h4>CPU 使用率 (%)</h4><div id="cCpu"></div></div>
           <div class="chart"><h4>内存使用率 (%)</h4><div id="cMem"></div></div>
@@ -288,12 +293,6 @@
           <button class="btn ghost" data-close="editModal">取消</button>
           <button class="btn" id="btnEditSubmit">保存</button>
         </div>
-        <!-- 面板快捷操作（在 detail panel 内直接编辑，无需回到仪表盘） -->
-        <div class="panel-actions" id="panelActions">
-          <button class="btn ghost sm" id="panelEdit">✏️ 编辑信息</button>
-          <button class="btn ghost sm" id="panelReset">🔑 重置 Token</button>
-          <button class="btn danger sm" id="panelDelete">🗑️ 删除节点</button>
-        </div>
       </div>
     </div>
 
@@ -326,7 +325,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="flags.js?v=8"></script>
-  <script src="admin.js?v=8"></script>
+  <script src="flags.js?v=9"></script>
+  <script src="admin.js?v=9"></script>
 </body>
 </html>
