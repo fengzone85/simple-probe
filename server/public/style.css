@@ -236,6 +236,7 @@ body {
 .empty { color: var(--muted); text-align: center; padding: 60px; }
 .empty.small { padding: 20px; font-size: 13px; }
 .hint { font-size: 12px; color: var(--muted); margin: 6px 0 10px; }
+.hint-sm { font-size: 11px; color: var(--muted); opacity: .75; margin: 4px 0 8px; }
 
 /* ============ 网络质量 probe 色块 ============ */
 .probes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }

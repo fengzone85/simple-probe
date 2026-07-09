@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>自托管监控 · Host Monitor</title>
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=11" />
   <style id="customCss"></style>
   <script src="vendor/echarts.min.js"></script>
 </head>
@@ -94,6 +94,10 @@
 
             <div class="tab-pane" data-spane="basic">
               <div class="field"><label>站点名称</label><input id="s_site_title" placeholder="如 我的服务器监控" /></div>
+              <div class="field"><label>Agent 连接地址</label>
+                <input id="s_agent_url" placeholder="留空则自动使用当前域名（例如 https://tz.222.blue:4443）" />
+                <p class="hint-sm">为安装脚本定义 Agent 的连接地址，方便 Web 与 Agent 使用不同域名/端口。留空则自动使用当前域名。</p>
+              </div>
               <div class="field"><label>自定义 CSS（保存后对所有访客生效，可实时预览）</label>
                 <textarea id="s_custom_css" rows="7" placeholder="例如： body{background:#0b0f17} .card{border-radius:16px;box-shadow:none}"></textarea>
               </div>
@@ -322,7 +326,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="flags.js?v=10"></script>
-  <script src="admin.js?v=10"></script>
+  <script src="flags.js?v=11"></script>
+  <script src="admin.js?v=11"></script>
 </body>
 </html>

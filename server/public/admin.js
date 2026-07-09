@@ -764,6 +764,7 @@ async function openSettings() {
     appSettings = ui;
     const n = s.notify || {};
     $('s_site_title').value = appSettings.site_title || '';
+    $('s_agent_url').value = appSettings.agent_server_url || '';
     $('s_custom_css').value = appSettings.custom_css || '';
     $('s_default_sort').value = appSettings.default_sort || 'created';
     const al = appSettings.alert;
@@ -838,6 +839,7 @@ async function saveSettings() {
   const al = appSettings.alert || { cpu_pct: 90, mem_pct: 90, offline_sec: 60 };
   const ui = {
     site_title: $('s_site_title').value.trim(),
+    agent_server_url: $('s_agent_url').value.trim(),
     custom_css: $('s_custom_css').value,
     default_sort: $('s_default_sort').value,
     group_order: appSettings.group_order || [],
