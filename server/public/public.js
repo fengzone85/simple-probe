@@ -199,7 +199,7 @@ function pubCardHtml(a) {
   // 简约版：仅基础信息，无任何悬停效果
   return `<div class="card pub-card tpl-simple">
     <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${flag}</div>
-    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · 离线'}</div>
+    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '') + (a.os ? (' · ' + esc(a.os)) : '')) : ' · 离线'}</div>
     <div class="metrics">
       <div class="metric"><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
       <div class="metric"><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
