@@ -428,7 +428,41 @@ body {
 .pub-card.tpl-simple { transition: none; }
 .pub-card.tpl-simple:hover { transform: none; animation: none; border-color: var(--border); }
 .pub-card.tpl-simple::after { display: none; }
-/* 视觉版：沿用后台 .card 样式（指标网格 / 曲线 / 硬盘条 / 探测点 / 悬停呼吸光晕），无需额外规则 */
+
+/* 视觉版：整体换成 Ant Design 深色风 —— 柔和分层阴影 + 青蓝主色强调 + 细边框，去掉彩色呼吸光晕 */
+/* 视觉版专属设计令牌：暗色近黑底 · 青蓝主色（#03aedc / #1677FF）· 多层低透柔和阴影 */
+:root, :root[data-theme="light"] {
+  --vis-border: rgba(0,0,0,.08);
+  --vis-shadow: 0 1px 2px -1px rgba(0,0,0,.10), 0 3px 8px -2px rgba(0,0,0,.08), 0 8px 24px -4px rgba(0,0,0,.06);
+  --vis-shadow-hover: 0 2px 6px -1px rgba(0,0,0,.12), 0 8px 18px -3px rgba(0,0,0,.10), 0 16px 40px -6px rgba(0,0,0,.10);
+  --vis-accent: #1677FF;
+}
+:root[data-theme="dark"] {
+  --vis-border: rgba(255,255,255,.10);
+  --vis-shadow: 0 1px 2px rgba(0,0,0,.30), 0 4px 12px rgba(0,0,0,.24), 0 10px 28px rgba(0,0,0,.18);
+  --vis-shadow-hover: 0 2px 6px rgba(0,0,0,.34), 0 8px 20px rgba(0,0,0,.28), 0 18px 44px rgba(0,0,0,.24);
+  --vis-accent: #03aedc;
+}
+.pub-card.tpl-visual {
+  border: 1px solid var(--vis-border);
+  border-radius: 14px;
+  box-shadow: var(--vis-shadow);
+  transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+/* 顶部青蓝强调细线（AntD 卡片常见的克制强调细节，不刺眼） */
+.pub-card.tpl-visual::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, #03aedc, #1677FF);
+  opacity: .85; border-radius: 14px 14px 0 0;
+}
+/* 去掉后台 .card 默认的渐变描边伪元素与彩色呼吸光晕 */
+.pub-card.tpl-visual::after { display: none; }
+.pub-card.tpl-visual:hover {
+  transform: translateY(-4px);
+  border-color: rgba(3,174,220,.45);
+  animation: none;
+  box-shadow: var(--vis-shadow-hover), 0 0 0 1px rgba(3,174,220,.16);
+}
 .pv-list { padding: 14px 26px 0; }
 .pv-footer { text-align: center; color: var(--muted); font-size: 12px; padding: 26px; border-top: 1px solid var(--border); margin-top: 30px; }
 .flag { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }

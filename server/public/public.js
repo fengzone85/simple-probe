@@ -49,10 +49,30 @@ function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
   else document.documentElement.removeAttribute('data-theme');
 }
+// 公开页暗亮一键切换（忽略 auto，在 light/dark 之间切换）
+function currentEffectiveTheme() {
+  const t = localStorage.getItem('theme');
+  if (t === 'light' || t === 'dark') return t;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+function syncThemeIcon() {
+  const btn = $('pvTheme');
+  if (!btn) return;
+  const dark = currentEffectiveTheme() === 'dark';
+  btn.textContent = dark ? '🌙' : '☀️';
+  btn.title = dark ? '切换到亮色' : '切换到暗色';
+}
+function quickToggleTheme() {
+  const next = currentEffectiveTheme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+  syncThemeIcon();
+}
 
 // ---------- 加载 ----------
 async function initPublic() {
   applyTheme(localStorage.getItem('theme') || 'auto');
+  syncThemeIcon();
   let meta = null;
   try { meta = await (await fetch('/api/public/meta')).json(); } catch (e) {}
   const enabled = !!(meta && meta.public_enabled);
@@ -228,6 +248,7 @@ function setPublicTemplate(v) {
 function bindPublic() {
   document.querySelectorAll('[data-pvlayout]').forEach(b => b.addEventListener('click', () => setPublicLayout(b.getAttribute('data-pvlayout'))));
   document.querySelectorAll('[data-pvtemplate]').forEach(b => b.addEventListener('click', () => setPublicTemplate(b.getAttribute('data-pvtemplate'))));
+  const tb = $('pvTheme'); if (tb) tb.addEventListener('click', quickToggleTheme);
 }
 bindPublic();
 initPublic();
