@@ -228,7 +228,11 @@ router.get('/public/agents', (req, res) => {
       uptime: m ? m.uptime : 0,
       os: m ? (m.os || '') : '',
       probes: m ? (m.probes || '') : '',
-      hostname: online ? (a.hostname || '') : ''
+      hostname: online ? (a.hostname || '') : '',
+      merchant: a.merchant || '',
+      expire_at: a.expire_at || '',
+      note: a.note || '',
+      monthly_quota_gb: a.monthly_quota_gb || 0
     };
   });
   res.json(list);

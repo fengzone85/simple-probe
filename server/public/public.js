@@ -45,6 +45,12 @@ function parseProbes(s) {
   catch (e) { return {}; }
 }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) return null;
+  return Math.ceil((d - new Date()) / 86400000);
+}
 function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
   else document.documentElement.removeAttribute('data-theme');
@@ -150,13 +156,22 @@ function pubCardHtml(a) {
     const loadArr = histOk ? sp.map(x => x.load1) : [a.load1];
     const tempArr = histOk ? sp.map(x => x.temp) : [a.temp];
     const swapArr = histOk ? sp.map(x => x.swap_pct) : [a.swap_pct];
+    const d = daysUntil(a.expire_at);
+    let expireBadge = '';
+    if (d != null) {
+      const cls = d < 0 ? 'expire' : (d <= 7 ? 'expire-soon' : '');
+      const txt = d < 0 ? `已过期 ${-d}天` : `剩 ${d} 天`;
+      expireBadge = `<span class="badge ${cls}">${txt}</span>`;
+    }
+    const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
     const countryBadge = (a.country && flagImg(a.country)) ? `<span class="badge flag" title="${esc(countryName(a.country))}">${flagImg(a.country)} ${esc(countryName(a.country))}</span>` : '';
     const probes = parseProbes(a.probes);
     const diskPct = a.disk_pct != null ? a.disk_pct : 0;
     const diskCls = pctClass(diskPct);
     return `<div class="card pub-card tpl-visual" data-id="${esc(a.id)}">
-      <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${countryBadge}</div>
+      <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${merchant}${expireBadge}${countryBadge}</div>
       <div class="meta">${esc(a.online ? (a.hostname || '') : '离线')}${a.os ? (' · ' + esc(a.os)) : ''}</div>
+      ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
       <div class="metrics">
         <div class="metric"><div class="m-spark">${pubSparkline(cpuArr, '#5cb6a5')}</div><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(memArr, '#6c9eff')}</div><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
