@@ -40,11 +40,11 @@ const AGENT_GIT_REPO = process.env.AGENT_GIT_REPO || 'https://github.com/fengzon
 const AGENT_INTERVAL_DEFAULT = Number(process.env.AGENT_INTERVAL || 15);
 
 // 受控端接入用的服务端公网地址：优先级为
-// ① UI 设置中「Agent 连接地址」 ② 环境变量 PUBLIC_URL ③ 从请求头自动推导。
-// 对应 Nezha / Komari 的「对接地址」功能：web 域名与 agent 地址可以不同。
+// ① UI 设置中「Agent 连接地址」② UI 设置中「项目网址」③ 环境变量 PUBLIC_URL ④ 从请求头自动推导。
 function getPublicBaseUrl(req) {
   const ui = db.getUiSettings();
   if (ui && ui.agent_server_url) return ui.agent_server_url.replace(/\/+$/, '');
+  if (ui && ui.site_url) return ui.site_url.replace(/\/+$/, '');
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, '');
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim() || 'https';
   const host = req.get('host');
