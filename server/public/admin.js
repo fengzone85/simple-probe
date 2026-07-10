@@ -689,6 +689,7 @@ function populateCountrySelect() {
 function openCreate() {
   populateCountrySelect();
   if ($('c_country')) $('c_country').value = '';
+  if ($('c_probe_targets')) $('c_probe_targets').value = appSettings.probe_targets || '';
   const btn = $('btnCreateSubmit');
   if (btn) { btn.dataset.done = ''; btn.textContent = '创建并生成 Token'; btn.disabled = false; }
   const res = $('createResult'); if (res) res.innerHTML = '';
@@ -697,7 +698,7 @@ function openCreate() {
 }
 // 创建成功后禁用表单，避免重复生成第二张客户端卡片
 function disableCreateForm(disabled) {
-  ['c_name', 'c_merchant', 'c_expire', 'c_quota', 'c_group', 'c_note', 'c_country'].forEach(id => {
+  ['c_name', 'c_merchant', 'c_expire', 'c_quota', 'c_group', 'c_note', 'c_country', 'c_probe_targets'].forEach(id => {
     const el = $(id); if (el) el.disabled = disabled;
   });
 }
@@ -741,7 +742,8 @@ async function submitCreate() {
         expire_at: $('c_expire').value, monthly_quota_gb: Number($('c_quota').value) || 0,
         group: $('c_group').value.trim(),
         country: $('c_country').value.trim(),
-        note: $('c_note').value.trim()
+        note: $('c_note').value.trim(),
+        probe_targets: $('c_probe_targets').value.trim()
       })
     });
     const inst = r.install || {};
@@ -770,6 +772,7 @@ async function openEdit(id) {
   $('e_group').value = a.group || '';
   $('e_country').value = a.country || '';
   $('e_note').value = a.note || '';
+  $('e_probe_targets').value = a.probe_targets || '';
   $('editResult').innerHTML = '';
   openModal('editModal');
 }
@@ -782,7 +785,8 @@ async function submitEdit() {
         expire_at: $('e_expire').value, monthly_quota_gb: Number($('e_quota').value) || 0,
         group: $('e_group').value.trim(),
         country: $('e_country').value.trim(),
-        note: $('e_note').value.trim()
+        note: $('e_note').value.trim(),
+        probe_targets: $('e_probe_targets').value.trim()
       })
     });
     closeModal('editModal'); toast('已保存', 'ok');
@@ -812,6 +816,41 @@ async function resetToken() {
       ${renderInstallCmds(inst, 'e')}`;
     toast('Token 已重置，请复制安装命令');
   } catch (e) { toast('重置失败：' + e.message); }
+}
+
+// 修改探测命令：免 Token 生成 Linux (systemd drop-in) / Windows (改 bat 重启) 一键命令
+async function openModify() {
+  if (!detailId) return;
+  const a = await api(`/api/agents/${detailId}`).catch(() => null);
+  const cur = (a && a.probe_targets) || appSettings.probe_targets || '';
+  const ta = $('modTargets');
+  ta.value = cur;
+  const gen = () => {
+    const pt = ta.value.trim();
+    const linux =
+      'sudo mkdir -p /etc/systemd/system/simple-probe-agent.service.d\n' +
+      'sudo tee /etc/systemd/system/simple-probe-agent.service.d/probe.conf >/dev/null <<\'EOF\'\n' +
+      '[Service]\n' +
+      'Environment="PROBE_TARGETS=' + pt + '"\n' +
+      'EOF\n' +
+      'sudo systemctl daemon-reload\n' +
+      'sudo systemctl restart simple-probe-agent';
+    const win =
+      "$id='" + detailId + "'; $pt='" + pt + "'\n" +
+      '$bat=Join-Path $env:ProgramData "simple-probe-agent\\run_scheduled.bat"\n' +
+      '$lines=Get-Content $bat\n' +
+      "if ($lines -match '^set PROBE_TARGETS=') {\n" +
+      '  ($lines -replace \'^set PROBE_TARGETS=.*\', "set PROBE_TARGETS=' + pt + '") | Set-Content $bat\n' +
+      '} else {\n' +
+      '  Add-Content $bat "set PROBE_TARGETS=' + pt + '"\n' +
+      '}\n' +
+      'Stop-ScheduledTask -TaskName "HostMonitorAgent-$id"; Start-ScheduledTask -TaskName "HostMonitorAgent-$id"';
+    $('modLinux').textContent = linux;
+    $('modWindows').textContent = win;
+  };
+  ta.oninput = gen;
+  gen();
+  openModal('cmdModal');
 }
 
 // 客户端列表快捷操作（无需打开编辑弹窗）
@@ -869,6 +908,7 @@ async function openSettings() {
     $('s_site_title').value = appSettings.site_title || '';
     $('s_site_url').value = appSettings.site_url || '';
     $('s_agent_url').value = appSettings.agent_server_url || '';
+    $('s_probe_targets').value = appSettings.probe_targets || '';
     // 前台/后台互跳统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
     const $home = $('btnHome');
     if ($home) $home.href = (appSettings.site_url || '').trim() || '/';
@@ -949,6 +989,7 @@ async function saveSettings() {
     site_title: $('s_site_title').value.trim(),
     site_url: $('s_site_url').value.trim(),
     agent_server_url: $('s_agent_url').value.trim(),
+    probe_targets: $('s_probe_targets').value.trim(),
     custom_css: $('s_custom_css').value,
     default_sort: $('s_default_sort').value,
     group_order: appSettings.group_order || [],
@@ -1158,6 +1199,7 @@ $('dpNext').addEventListener('click', switchToNext);
 $('dpClose').addEventListener('click', () => history.back());
 $('panelEdit').addEventListener('click', () => { if (detailId) openEdit(detailId); });
 $('panelReset').addEventListener('click', () => { if (detailId) openEdit(detailId); $('btnResetToken').click(); });
+$('panelModify').addEventListener('click', () => { if (detailId) openModify(); });
 $('panelDelete').addEventListener('click', () => { if (detailId) openEdit(detailId); setTimeout(() => $('btnDelete').click(), 50); });
 initRouter();
 applyTheme(localStorage.getItem('theme') || 'auto');

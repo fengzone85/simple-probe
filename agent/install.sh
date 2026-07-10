@@ -56,6 +56,9 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             INTERVAL="$2"; shift 2 ;;
+        --probe-targets)
+            # 网络质量自测目标（label:host[:port]，逗号分隔）；写进 agent.env，受控端启动即生效。
+            PROBE_TARGETS="$2"; shift 2 ;;
         --repo)
             REPO="$2"; shift 2 ;;
         --install-agent)
@@ -282,6 +285,11 @@ INTERVAL=${INTERVAL}
 DISK_PATH=/
 STATE_FILE=/var/lib/simple-probe/state.json
 "
+# 探测目标（网络质量自测 DNS）：服务端下发的 label:host 列表；为空则受控端回退内置默认。
+if [[ -n "${PROBE_TARGETS:-}" ]]; then
+  ENV_CONTENT="${ENV_CONTENT}PROBE_TARGETS=${PROBE_TARGETS}
+"
+fi
 
 TMP_ENV=$(mktemp)
 chmod 600 "$TMP_ENV"

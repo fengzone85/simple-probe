@@ -119,6 +119,10 @@
                 <input id="s_agent_url" placeholder="留空则自动使用当前域名（例如 https://tz.222.blue:4443）" />
                 <p class="hint-sm">仅供 Agent 上报与安装脚本使用的直连地址（通常未套盾）。请勿填入「项目网址」，也不要对外公开此地址。</p>
               </div>
+              <div class="field"><label>默认探测目标 (DNS)</label>
+                <input id="s_probe_targets" placeholder="如 移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8" />
+                <p class="hint-sm">网络质量自测目标，格式 <code>标签:IP[:端口]</code> 逗号分隔。新建客户端未单独填写时采用此默认；不同地区可单独覆盖。留空则受控端用代码内置默认。</p>
+              </div>
               <div class="field"><label>自定义 CSS（保存后对所有访客生效，可实时预览）</label>
                 <textarea id="s_custom_css" rows="7" placeholder="例如： body{background:#0b0f17} .card{border-radius:16px;box-shadow:none}"></textarea>
               </div>
@@ -258,6 +262,7 @@
         <div class="panel-actions" id="panelActions">
           <button class="btn ghost sm" id="panelEdit">✏️ 编辑信息</button>
           <button class="btn ghost sm" id="panelReset">🔑 重置 Token</button>
+          <button class="btn ghost sm" id="panelModify">🔧 修改探测命令</button>
           <button class="btn danger sm" id="panelDelete">🗑️ 删除节点</button>
         </div>
         <div class="charts">
@@ -280,6 +285,7 @@
       <div class="modal">
         <h2>新建客户端</h2>
         <div class="field"><label>名称</label><input id="c_name" placeholder="如 香港CN2-01" /></div>
+        <div class="field"><label>探测目标 (DNS，可留空用默认)</label><input id="c_probe_targets" placeholder="留空则采用「设置」里的默认探测目标" /></div>
         <div class="row2">
           <div class="field"><label>商家</label><input id="c_merchant" placeholder="如 腾讯云 / 搬瓦工" /></div>
           <div class="field"><label>到期时间</label><input id="c_expire" type="date" /></div>
@@ -315,12 +321,39 @@
           <div class="field"><label>备注</label><input id="e_note" /></div>
         </div>
         <div class="field"><label>国家 / 地区（用于卡片国旗）</label><select id="e_country"></select></div>
+        <div class="field"><label>探测目标 (DNS)</label><input id="e_probe_targets" placeholder="空 = 采用默认；不同地区可单独填可达 DNS" /></div>
         <div id="editResult"></div>
         <div class="actions">
           <button class="btn danger" id="btnDelete">删除</button>
           <button class="btn ghost" id="btnResetToken">重置 Token</button>
           <button class="btn ghost" data-close="editModal">取消</button>
           <button class="btn" id="btnEditSubmit">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 修改探测命令 modal -->
+    <div class="modal-bg" id="cmdModal">
+      <div class="modal">
+        <h2>🔧 修改探测目标命令</h2>
+        <p class="hint">填入该受控端实际可达的探测目标（格式 <code>标签:IP[:端口]</code>，逗号分隔），自动生成一键修改命令。Linux 写 systemd drop-in 后重启；Windows 改写 bat 并重启计划任务。无需重装、无需 Token。</p>
+        <div class="field"><label>探测目标 (DNS)</label><textarea id="modTargets" rows="3" style="width:100%;font-family:monospace"></textarea></div>
+        <div class="install-cmds">
+          <div class="tabs">
+            <button class="btn ghost sm active" data-tab="linux">Linux</button>
+            <button class="btn ghost sm" data-tab="windows">Windows (Win11)</button>
+          </div>
+          <div class="tab-pane" data-pane="linux">
+            <pre class="cmd" id="modLinux"></pre>
+            <button class="btn sm" data-copy="modLinux">复制 Linux 命令</button>
+          </div>
+          <div class="tab-pane" data-pane="windows" style="display:none">
+            <pre class="cmd" id="modWindows"></pre>
+            <button class="btn sm" data-copy="modWindows">复制 Windows 命令</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" data-close="cmdModal">关闭</button>
         </div>
       </div>
     </div>

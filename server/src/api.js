@@ -91,18 +91,46 @@ function getPublicBaseUrl(req) {
 
 // Nezha 风格：一条命令搞定对接。原生版走根 install.sh（自动拉取 agent 载荷并装 systemd）；
 // Docker 版现场从源码 git 构建镜像并运行，无需任何仓库账号。
-function buildInstallCommands(serverUrl, agentId, agentToken, interval) {
+// probeTargets：网络质量自测目标（格式 label:host[:port] 逗号分隔），服务端可配置；
+// 为空则受控端回退到各自代码里的内置默认。部署时直接写进安装命令，免去手动改环境变量。
+function buildInstallCommands(serverUrl, agentId, agentToken, interval, probeTargets) {
   const iv = interval || AGENT_INTERVAL_DEFAULT;
+  const ptArg = probeTargets ? ` --probe-targets "${probeTargets}"` : '';
+  const ptEnv = probeTargets ? ` -e PROBE_TARGETS=${probeTargets}` : '';
+  const ptWin = probeTargets ? ` -ProbeTargets '${probeTargets}'` : '';
   // 原生版采用 Komari 风格：先下载成文件、chmod +x、再 sudo 执行（相对 curl|bash 更透明、可审阅）。
   const native = `curl -fsSL ${REPO_BASE}/install.sh -o install.sh
 chmod +x install.sh
-sudo ./install.sh --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id ${agentId} --token ${agentToken} --interval ${iv}`;
-  const docker = `docker build -t simple-probe-agent ${AGENT_GIT_REPO} \\\n  && docker run -d --name simple-probe-agent --restart unless-stopped \\\n     -e SERVER_URL=${serverUrl} -e AGENT_ID=${agentId} -e AGENT_TOKEN=${agentToken} -e INTERVAL=${iv} \\\n     -v simple-probe-state:/data \\\n     simple-probe-agent`;
+sudo ./install.sh --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id ${agentId} --token ${agentToken} --interval ${iv}${ptArg}`;
+  const docker = `docker build -t simple-probe-agent ${AGENT_GIT_REPO} \\\n  && docker run -d --name simple-probe-agent --restart unless-stopped \\\n     -e SERVER_URL=${serverUrl} -e AGENT_ID=${agentId} -e AGENT_TOKEN=${agentToken} -e INTERVAL=${iv}${ptEnv} \\\n     -v simple-probe-state:/data \\\n     simple-probe-agent`;
   // Windows 版：一条 PowerShell 命令。外层用双引号、内部一律单引号，避免引号嵌套。
   // install.ps1 会自举下载 windows_agent.py/win_collector.py/requirements.txt 到
   // %ProgramData%\simple-probe-agent，并注册登录自启的计划任务。需以管理员身份运行。
-  const windows = `powershell -NoProfile -ExecutionPolicy Bypass -Command "\`$p=Join-Path \`$env:TEMP 'sp-agent-install.ps1'; iwr '${REPO_BASE}/agent/windows/install.ps1' -OutFile \`$p -UseBasicParsing; & \`$p -RegisterTask -Repo '${REPO_BASE}/agent/windows' -ServerUrl '${serverUrl}' -AgentId '${agentId}' -AgentToken '${agentToken}' -Interval ${iv}"`;
-  return { server_url: serverUrl, native_cmd: native, docker_cmd: docker, windows_cmd: windows };
+  const windows = `powershell -NoProfile -ExecutionPolicy Bypass -Command "\`$p=Join-Path \`$env:TEMP 'sp-agent-install.ps1'; iwr '${REPO_BASE}/agent/windows/install.ps1' -OutFile \`$p -UseBasicParsing; & \`$p -RegisterTask -Repo '${REPO_BASE}/agent/windows' -ServerUrl '${serverUrl}' -AgentId '${agentId}' -AgentToken '${agentToken}' -Interval ${iv}${ptWin}"`;
+  return { server_url: serverUrl, native_cmd: native, docker_cmd: docker, windows_cmd: windows, probe_targets: probeTargets || '' };
+}
+
+// 免 Token 的「修改探测目标」命令：已有受控端换 DNS 时，无需重装 / 无需 Token。
+// Linux 写 systemd drop-in 并重启；Windows 改 run_scheduled.bat 的 PROBE_TARGETS 行后重启计划任务。
+function buildModifyCommands(serverUrl, agentId, probeTargets) {
+  const pt = probeTargets || '';
+  const linux = `sudo mkdir -p /etc/systemd/system/simple-probe-agent.service.d
+sudo tee /etc/systemd/system/simple-probe-agent.service.d/probe.conf >/dev/null <<'EOF'
+[Service]
+Environment="PROBE_TARGETS=${pt}"
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart simple-probe-agent`;
+  const win = `$id='${agentId}'; $pt='${pt}'
+$bat=Join-Path $env:ProgramData "simple-probe-agent\\run_scheduled.bat"
+$lines=Get-Content $bat
+if ($lines -match '^set PROBE_TARGETS=') {
+  ($lines -replace '^set PROBE_TARGETS=.*', "set PROBE_TARGETS=$pt") | Set-Content $bat
+} else {
+  Add-Content $bat "set PROBE_TARGETS=$pt"
+}
+Stop-ScheduledTask -TaskName "HostMonitorAgent-$id"; Start-ScheduledTask -TaskName "HostMonitorAgent-$id"`;
+  return { linux_cmd: linux, windows_cmd: win, probe_targets: pt };
 }
 
 // ---- Agent report (push) ----
@@ -344,6 +372,9 @@ router.get('/public/themes', (req, res) => {
 
 // ---- Admin: create agent ----
 router.post('/agents', adminOnly, (req, res) => {
+  // 探测目标：建客户端时未显式填写则回退到「设置」里的全局默认（不同地域可单独覆盖）。
+  const ui = db.getUiSettings();
+  const probeTargets = str(req.body.probe_targets, 600) || ui.probe_targets || '';
   const { id, token } = db.createAgent({
     name: str(req.body.name, 100) || undefined,
     merchant: str(req.body.merchant, 100),
@@ -351,10 +382,11 @@ router.post('/agents', adminOnly, (req, res) => {
     expire_at: str(req.body.expire_at, 40),
     monthly_quota_gb: req.body.monthly_quota_gb,
     grp: str(req.body.group, 60),
-    country: str(req.body.country, 2)
+    country: str(req.body.country, 2),
+    probe_targets: probeTargets
   });
-  // 创建时一次性把「地址 + 该客户端令牌」预填进两条一键命令返回（令牌仅此刻明文可用）。
-  const install = buildInstallCommands(getPublicBaseUrl(req), id, token, AGENT_INTERVAL_DEFAULT);
+  // 创建时一次性把「地址 + 该客户端令牌 + 探测目标」预填进一键命令返回（令牌仅此刻明文可用）。
+  const install = buildInstallCommands(getPublicBaseUrl(req), id, token, AGENT_INTERVAL_DEFAULT, probeTargets);
   res.json({ id, token, install });
 });
 
@@ -369,7 +401,8 @@ router.put('/agents/:id', adminOnly, (req, res) => {
     expire_at: str(req.body.expire_at, 40),
     monthly_quota_gb: req.body.monthly_quota_gb,
     grp: str(req.body.group, 60),
-    country: str(req.body.country, 2)
+    country: str(req.body.country, 2),
+    probe_targets: str(req.body.probe_targets, 600)
   });
   res.json({ ok: true });
 });
@@ -385,8 +418,22 @@ router.post('/agents/:id/reset-token', adminOnly, (req, res) => {
   const token = db.resetAgentToken(req.params.id);
   if (!token) return res.status(404).json({ error: 'not found' });
   // 重置后同样回带三条一键命令：用户直接复制重装即可，无需手改环境变量。
-  const install = buildInstallCommands(getPublicBaseUrl(req), req.params.id, token, AGENT_INTERVAL_DEFAULT);
+  // 探测目标沿用该受控端已保存的值，保证重装后 DNS 保持一致。
+  const a = db.getAgent(req.params.id);
+  const install = buildInstallCommands(getPublicBaseUrl(req), req.params.id, token, AGENT_INTERVAL_DEFAULT, a ? a.probe_targets : '');
   res.json({ ok: true, token, install });
+});
+
+// ---- Admin: 生成某受控端的「安装命令」与「修改探测目标命令」----
+// 修改命令无需 Token（仅改本地 systemd drop-in / bat 后重启），可由管理员按需生成。
+// query.probe_targets 可临时覆盖（用于预览不同 DNS 的命令），缺省用该受控端已存值。
+router.get('/agents/:id/commands', adminOnly, (req, res) => {
+  const a = db.getAgent(req.params.id);
+  if (!a) return res.status(404).json({ error: 'not found' });
+  const probeTargets = str(req.query.probe_targets, 600) || a.probe_targets || '';
+  const install = buildInstallCommands(getPublicBaseUrl(req), a.id, '<token>', AGENT_INTERVAL_DEFAULT, probeTargets);
+  const modify = buildModifyCommands(getPublicBaseUrl(req), a.id, probeTargets);
+  res.json({ id: a.id, probe_targets: probe_targets, install, modify });
 });
 
 // ---- Admin: UI + 通知设置（持久化到 admin_config）----
