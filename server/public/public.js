@@ -187,7 +187,7 @@ function pubCardHtml(a) {
     const diskCls = pctClass(diskPct);
     return `<div class="card pub-card tpl-visual" data-id="${esc(a.id)}">
       <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${merchant}${expireBadge}${countryBadge}</div>
-      <div class="meta">${esc(a.online ? (a.hostname || '') : '离线')}${a.os ? (' · ' + esc(a.os)) : ''}</div>
+      <div class="meta">${esc(a.online ? (a.hostname || '') : '离线')}${a.online && a.os ? (() => { const o = osIcon(a.os); return ' · ' + (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })() : ''}</div>
       ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
       <div class="metrics">
         <div class="metric"><div class="m-spark">${pubSparkline(cpuArr, '#5cb6a5')}</div><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
@@ -216,7 +216,7 @@ function pubCardHtml(a) {
   // 简约版：仅基础信息，无任何悬停效果
   return `<div class="card pub-card tpl-simple">
     <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${flag}</div>
-    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '') + (a.os ? (' · ' + esc(a.os)) : '')) : ' · 离线'}</div>
+    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '') + (a.os ? (' · ' + (() => { const o = osIcon(a.os); return (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })()) : '')) : ' · 离线'}</div>
     <div class="metrics">
       <div class="metric"><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
       <div class="metric"><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
@@ -266,7 +266,7 @@ function showPublicDetail(id, tr) {
       ${a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : ''}
       ${a.country && flagImg(a.country) ? `<span class="badge flag">${flagImg(a.country)} ${esc(countryName(a.country))}</span>` : ''}
       <span class="badge">${esc(a.hostname || '')}</span>
-      ${a.os ? `<span class="badge">${esc(a.os)}</span>` : ''}
+      ${a.os ? `<span class="badge">${(() => { const o = osIcon(a.os); return o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : ''; })()}${esc(a.os)}</span>` : ''}
     </div>
     <div class="ex-stats">
       <div class="ex-stat"><span class="ex-lbl">CPU</span><span class="ex-val ${pctClass(a.cpu)}">${fmtPct(a.cpu)}</span></div>
