@@ -271,7 +271,7 @@ body {
 .probes { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; margin-top: 6px; flex-basis: 100%; }
 .probe { font-size: 11px; padding: 2px 8px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 网络质量探测点按延迟着色：正常绿 / 偏慢黄 / 过慢红 / 本次无数据(偶发)灰且不刺眼 */
-.probe.probe-ok   { color: #1f9d55; border-color: rgba(31,157,85,.38); }
+.probe.probe-mid  { color: #1677FF; border-color: rgba(22,119,255,.38); background: rgba(22,119,255,.1); }
 .probe.probe-warn { color: #c98a00; border-color: rgba(201,138,0,.38); }
 .probe.probe-bad  { color: #d6453d; border-color: rgba(214,69,61,.38); }
 .probe.probe-na   { color: var(--muted); border-color: var(--border); opacity: .65; }
@@ -444,6 +444,9 @@ body {
   box-shadow: var(--vis-shadow);
   transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
 }
+.pub-card.tpl-visual .m-val { font-size: 11px; font-weight: 500; color: var(--text); }
+.pub-card.tpl-visual .disk-row .m-val { font-size: 11px; font-weight: 500; color: var(--text); }
+.pub-card.tpl-visual .probes { grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .pv-list { padding: 14px 26px 0; }
 .pv-footer { text-align: center; color: var(--muted); font-size: 12px; padding: 26px; border-top: 1px solid var(--border); margin-top: 30px; }
 .flag { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }

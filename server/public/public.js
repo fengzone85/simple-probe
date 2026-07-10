@@ -31,13 +31,13 @@ function pctClass(p) {
   return '';
 }
 // ---------- 探测点 / 速率 辅助（与后台 admin.js 保持一致） ----------
-const PROBE_ABBR = { '联通': 'cu', '电信': 'ct', '移动': 'cm' };
+const PROBE_ABBR = { '联通': 'cu', '电信': 'ct', '移动': 'cm', '公共': 'GG' };
 function probeLabel(l) { return PROBE_ABBR[l] || l; }
 function probeClass(ms) {
   if (ms == null) return 'probe-na';
-  if (ms >= 300) return 'probe-bad';
-  if (ms >= 100) return 'probe-warn';
-  return 'probe-ok';
+  if (ms <= 50) return 'probe-ok';
+  if (ms <= 200) return 'probe-mid';
+  return 'probe-warn';
 }
 function parseProbes(s) {
   if (!s) return {};
@@ -168,7 +168,7 @@ function pubCardHtml(a) {
           <div class="m-info">
             <span class="m-lbl">网络</span>
             <span class="m-val">↓ ${fmtRate(a.net_rx_rate)} &nbsp;↑ ${fmtRate(a.net_tx_rate)}</span>
-            ${Object.keys(probes).length ? `<div class="probes">${Object.keys(probes).map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(probeLabel(l))} ${p && p.ok ? (p.ms != null ? p.ms + 'ms' : '✓') : '—'}</span>`; }).join('')}</div>` : ''}
+            ${Object.keys(probes).length ? `<div class="probes">${Object.keys(probes).map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(probeLabel(l))} ${p && p.ok ? (p.ms != null ? p.ms : '✓') : '—'}</span>`; }).join('')}</div>` : ''}
           </div>
         </div>
       </div>
