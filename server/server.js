@@ -136,6 +136,15 @@ app.get('/', (req, res, next) => {
 });
 // admin.html 受 IP 白名单保护
 app.get('/admin.html', ipWhitelist, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+// 禁用 JS/CSS/SVG/HTML 的浏览器/CDN 缓存，确保更新后立即生效
+app.use((req, res, next) => {
+  if (/\.(js|css|svg|html?)$/i.test(req.path)) {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // periodic prune of old metrics
