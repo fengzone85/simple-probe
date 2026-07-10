@@ -383,27 +383,22 @@ function renderClients() {
     <tbody>${body}</tbody></table>`;
   $('clientsCount').textContent = `共 ${rows.length} 台 · 在线 ${online}`;
 }
-// 硬盘条渲染：有多盘(disks 数组)则逐盘展示，否则回退单盘(disk_pct/used/total)
+// 硬盘条渲染：把所有物理盘(disks 数组)汇总成「一个总容量」单条展示，
+// 不再逐盘列出；无 disks 时回退单盘(disk_pct/used/total)。
 function diskRowsHtml(m) {
+  let used = 0, total = 0;
   const disks = (m && Array.isArray(m.disks) && m.disks.length) ? m.disks : null;
-  const nameFor = (mnt) => mnt === '/' ? '系统盘' : (mnt.split('/').filter(Boolean).pop() || mnt);
   if (disks) {
-    return disks.map(d => {
-      const pct = Number(d.pct) || 0;
-      const cls = pctClass(pct);
-      return `<div class="disk-row">
-        <span class="m-lbl" title="${esc(d.mount)}">${esc(nameFor(d.mount))}</span>
-        <div class="bar"><i class="bar-i ${cls}" style="width:${pct}%"></i></div>
-        <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(d.used)}/${fmtBytes(d.total)}</span>
-      </div>`;
-    }).join('');
+    for (const d of disks) { used += Number(d.used) || 0; total += Number(d.total) || 0; }
+  } else {
+    used = Number(m.disk_used) || 0; total = Number(m.disk_total) || 0;
   }
-  const pct = m.disk_pct != null ? m.disk_pct : 0;
+  const pct = total ? (used / total * 100) : 0;
   const cls = pctClass(pct);
   return `<div class="disk-row">
     <span class="m-lbl">硬盘</span>
-    <div class="bar"><i class="bar-i ${cls}" style="width:${pct}%"></i></div>
-    <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span>
+    <div class="bar"><i class="bar-i ${cls}" style="width:${pct.toFixed(2)}%"></i></div>
+    <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(used)}/${fmtBytes(total)}</span>
   </div>`;
 }
 function cardHtml(a, hist) {

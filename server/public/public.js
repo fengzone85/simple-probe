@@ -184,27 +184,22 @@ function pubSparkline2(rArr, wArr, rColor, wColor) {
   </svg>`;
 }
 // 视觉版卡片：与后台仪表盘卡片保持一致（CPU/内存/负载/温度/Swap 曲线 + 网络 + 探测点 + 硬盘条 + 悬停呼吸光晕）
-// 公开页硬盘条渲染：有多盘(disks 数组)则逐盘展示，否则回退单盘
+// 公开页硬盘条渲染：把所有物理盘(disks 数组)汇总成「一个总容量」单条展示，
+// 不再逐盘列出；无 disks 时回退单盘(disk_pct/used/total)。
 function pubDiskRowsHtml(a) {
+  let used = 0, total = 0;
   const disks = (a && Array.isArray(a.disks) && a.disks.length) ? a.disks : null;
-  const nameFor = (mnt) => mnt === '/' ? '系统盘' : (mnt.split('/').filter(Boolean).pop() || mnt);
   if (disks) {
-    return disks.map(d => {
-      const pct = Number(d.pct) || 0;
-      const cls = pctClass(pct);
-      return `<div class="disk-row">
-        <span class="m-lbl" title="${esc(d.mount)}">${esc(nameFor(d.mount))}</span>
-        <div class="bar"><i class="bar-i ${cls}" style="width:${pct}%"></i></div>
-        <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(d.used)}/${fmtBytes(d.total)}</span>
-      </div>`;
-    }).join('');
+    for (const d of disks) { used += Number(d.used) || 0; total += Number(d.total) || 0; }
+  } else {
+    used = Number(a.disk_used) || 0; total = Number(a.disk_total) || 0;
   }
-  const pct = a.disk_pct != null ? a.disk_pct : 0;
+  const pct = total ? (used / total * 100) : 0;
   const cls = pctClass(pct);
   return `<div class="disk-row">
     <span class="m-lbl">硬盘</span>
-    <div class="bar"><i class="bar-i ${cls}" style="width:${pct}%"></i></div>
-    <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(a.disk_used)}/${fmtBytes(a.disk_total)}</span>
+    <div class="bar"><i class="bar-i ${cls}" style="width:${pct.toFixed(2)}%"></i></div>
+    <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(used)}/${fmtBytes(total)}</span>
   </div>`;
 }
 function pubCardHtml(a) {
