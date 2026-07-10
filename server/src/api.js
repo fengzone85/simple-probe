@@ -20,6 +20,11 @@ function shortHost(h) {
   return h;                                        // 后缀纯数字 => 疑似 IP，原样保留
 }
 
+// 把 metrics.disks（TEXT 存储的 JSON 数组）安全解析为数组，供前端多盘渲染。
+function parseDisks(s) {
+  try { const a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+
 // 应用层限流（兜底，不依赖 Nginx）：每 IP 每 10s 最多 20 次。
 // /report 已由 Nginx 单独限流，此处放行。trust proxy 已在 server.js 启用，req.ip 为真实客户端。
 const RATE_WINDOW = 10000, RATE_MAX = 20;
@@ -139,7 +144,8 @@ router.get('/agents', adminOrReadonly, (req, res) => {
   const list = db.getAgents().map((a) => {
     const latest = db.getLatestMetric(a.id);
     const online = a.last_seen && (now - a.last_seen) < offlineSec * 1000;
-    return Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null, hostname: shortHost(a.hostname) });
+    const latestOut = latest ? Object.assign({}, latest, { disks: parseDisks(latest.disks) }) : null;
+    return Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latestOut, hostname: shortHost(a.hostname) });
   });
   res.json(list);
 });
@@ -160,7 +166,8 @@ router.get('/agents/:id', adminOrReadonly, (req, res) => {
   const latest = db.getLatestMetric(a.id);
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
   const online = a.last_seen && (Date.now() - a.last_seen) < offlineSec * 1000;
-  res.json(Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null, hostname: shortHost(a.hostname) }));
+  const latestOut = latest ? Object.assign({}, latest, { disks: parseDisks(latest.disks) }) : null;
+  res.json(Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latestOut, hostname: shortHost(a.hostname) }));
 });
 
 // ---- Admin: metrics time-series ----
@@ -266,7 +273,8 @@ router.get('/public/agents', (req, res) => {
       merchant: a.merchant || '',
       expire_at: a.expire_at || '',
       note: a.note || '',
-      monthly_quota_gb: a.monthly_quota_gb || 0
+      monthly_quota_gb: a.monthly_quota_gb || 0,
+      disks: m ? parseDisks(m.disks) : []
     };
   });
   res.json(list);

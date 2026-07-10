@@ -65,6 +65,56 @@ def disk_info(path='/'):
     return used, total, pct
 
 
+# 真实磁盘文件系统类型（用于过滤伪文件系统，避免把 tmpfs/proc 等统计进"硬盘"）。
+REAL_FS = {
+    'ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'f2fs', 'reiserfs', 'jfs',
+    'nilfs2', 'vfat', 'ntfs', 'exfat', 'zfs'
+}
+
+
+def disk_list(root='/'):
+    """返回所有真实磁盘挂载点的使用率列表（用于多盘展示）。
+    root: agent 根目录。裸跑为 '/'；Docker 形态为 '/host'，此时需读宿主机的
+    /proc/mounts 并把挂载点拼回 /host 前缀再 statvfs，才能拿到真实各盘数据。
+    过滤 tmpfs/proc/sysfs/devtmpfs/cgroup 等伪文件系统，去重 bind mount。"""
+    if root in ('/', '', None):
+        mounts_path = '/proc/mounts'
+        prefix = ''
+    else:
+        mounts_path = os.path.join(root, 'proc', 'mounts')
+        prefix = root.rstrip('/')
+    if not os.path.exists(mounts_path):
+        mounts_path = '/proc/mounts'
+        prefix = ''
+    seen = set()
+    out = []
+    try:
+        with open(mounts_path) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                dev, mount, fstype = parts[0], parts[1], parts[2]
+                if fstype not in REAL_FS:
+                    continue
+                if mount in seen:
+                    continue
+                seen.add(mount)
+                p = mount if not prefix else (prefix + '/' + mount.lstrip('/'))
+                try:
+                    st = os.statvfs(p)
+                except Exception:
+                    continue
+                total = st.f_blocks * st.f_frsize
+                free = st.f_bfree * st.f_frsize
+                used = max(0, total - free)
+                pct = (used / total * 100.0) if total else 0.0
+                out.append({'mount': mount, 'used': used, 'total': total, 'pct': round(pct, 2)})
+    except Exception:
+        pass
+    return out
+
+
 def load_avg():
     parts = _read('/proc/loadavg').split()
     if len(parts) >= 3:
@@ -255,6 +305,7 @@ class Collector:
 
         mem_used, mem_total, mem_pct = mem_info()
         disk_used, disk_total, disk_pct = disk_info(self.disk_path)
+        disks = disk_list(self.disk_path)
         l1, l5, l15 = load_avg()
         swap_used, swap_total, swap_pct = swap_info()
         temp = temp_celsius()
@@ -332,5 +383,6 @@ class Collector:
             'net_tx_month': st.get('month_tx', 0),
             'disk_r_rate': disk_r_rate,
             'disk_w_rate': disk_w_rate,
+            'disks': disks,
             'probes': probes
         }

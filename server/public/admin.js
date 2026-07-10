@@ -383,6 +383,29 @@ function renderClients() {
     <tbody>${body}</tbody></table>`;
   $('clientsCount').textContent = `共 ${rows.length} 台 · 在线 ${online}`;
 }
+// 硬盘条渲染：有多盘(disks 数组)则逐盘展示，否则回退单盘(disk_pct/used/total)
+function diskRowsHtml(m) {
+  const disks = (m && Array.isArray(m.disks) && m.disks.length) ? m.disks : null;
+  const nameFor = (mnt) => mnt === '/' ? '系统盘' : (mnt.split('/').filter(Boolean).pop() || mnt);
+  if (disks) {
+    return disks.map(d => {
+      const pct = Number(d.pct) || 0;
+      const cls = pctClass(pct);
+      return `<div class="disk-row">
+        <span class="m-lbl" title="${esc(d.mount)}">${esc(nameFor(d.mount))}</span>
+        <div class="bar"><i class="bar-i ${cls}" style="width:${pct}%"></i></div>
+        <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(d.used)}/${fmtBytes(d.total)}</span>
+      </div>`;
+    }).join('');
+  }
+  const pct = m.disk_pct != null ? m.disk_pct : 0;
+  const cls = pctClass(pct);
+  return `<div class="disk-row">
+    <span class="m-lbl">硬盘</span>
+    <div class="bar"><i class="bar-i ${cls}" style="width:${pct}%"></i></div>
+    <span class="m-val ${cls}">${fmtPct(pct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span>
+  </div>`;
+}
 function cardHtml(a, hist) {
   const m = a.latest || {};
   const d = daysUntil(a.expire_at);
@@ -471,11 +494,7 @@ function cardHtml(a, hist) {
         </div>
       </div>
     </div>
-    <div class="disk-row">
-      <span class="m-lbl">硬盘</span>
-      <div class="bar"><i data-pct="${diskPct}"></i></div>
-      <span class="m-val ${diskCls}">${fmtPct(diskPct)} · ${fmtBytes(m.disk_used)}/${fmtBytes(m.disk_total)}</span>
-    </div>
+    ${diskRowsHtml(m)}
     <div class="foot">
       <span class="uptime">⏱ ${m.uptime ? fmtUptime(m.uptime) : '—'}</span>
       <button class="btn ghost sm" data-edit="${a.id}">编辑</button>

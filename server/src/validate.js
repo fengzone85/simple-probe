@@ -53,7 +53,25 @@ const validateReport = (b) => {
       return JSON.stringify(out);
     })(),
     os: str(b.os, 200),
-    hostname: str(b.hostname, 200)
+    hostname: str(b.hostname, 200),
+    // 多盘使用率（可选）：Agent 遍历 /proc/mounts 上报，每项含 mount/used/total/pct。
+    // 宽松校验，非法项丢弃，最多 32 块盘，避免异常负载撑爆数据库。
+    disks: (() => {
+      const d = b.disks;
+      if (!Array.isArray(d)) return '[]';
+      const out = [];
+      for (const it of d) {
+        if (!it || typeof it !== 'object') continue;
+        const mount = typeof it.mount === 'string' ? it.mount.slice(0, 200) : '';
+        const used = num(it.used, 0, 1024 * 1024 * 1024 * 1024 * 1024);
+        const total = num(it.total, 0, 1024 * 1024 * 1024 * 1024 * 1024);
+        const pct = num(it.pct, 0, 100);
+        if (used === null || total === null || pct === null) continue;
+        out.push({ mount, used, total, pct: +pct.toFixed(2) });
+        if (out.length >= 32) break;
+      }
+      return JSON.stringify(out);
+    })()
   };
 };
 
