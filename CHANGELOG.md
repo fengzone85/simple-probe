@@ -1,5 +1,11 @@
 # Changelog
 
+## install.sh v1.1.1（2026-07-10）
+- 修复「更新服务端」仍报 8080 占用：根因是**运行中的 install.sh 是旧实例**（先 `git pull` 新源码但内存逻辑仍是旧的，旧逻辑缺 `docker compose down`）。
+- 新增：源码同步完成后 `exec` 磁盘上的最新 `install.sh --update-server`，确保后续停旧容器/重建一定用最新代码（防「拉新跑旧」）。用 `SP_REEXECED` 环境变量防自循环。
+- 端口兜底：`docker compose down --remove-orphans` 后，若 8080 仍被任意容器占用（孤儿容器/其它 compose 项目），`docker ps --filter publish=8080` 定位并 `docker rm -f` 强制释放。
+- 版本号升至 `1.1.1`。
+
 ## install.sh 版本化 + 更新检查 v1.1.0（2026-07-10）
 - 脚本引入语义化版本号：头部新增 `SCRIPT_VERSION` / `SCRIPT_DATE` / `SCRIPT_NOTES`（本版要点）。
 - 菜单横幅显示 `vX.Y.Z (日期) + 本版要点`；进菜单时静默拉取远端版本（3s 超时、失败即跳过），有新版黄字提示「▲ 发现新版，建议选 4) 更新安装脚本」，否则绿字「✓ 已是最新」。

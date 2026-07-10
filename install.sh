@@ -25,9 +25,9 @@ set -euo pipefail
 # ── 脚本版本（语义化）──────────────────────────────────────────────────────────
 # 每次修改本脚本行为，请同步 +1 版本号、更新日期与「本版要点」，方便用户对比是否
 # 需要更新，并在更新后直观了解改动内容。远端菜单会据此提示「发现新版」。
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.1.1"
 SCRIPT_DATE="2026-07-10"
-SCRIPT_NOTES="更新服务端前先释放端口(修复8080占用)；脚本引入版本号与更新检查"
+SCRIPT_NOTES="更新服务端前先释放端口(修复8080占用)；更新后重新加载最新脚本自身；端口占用兜底强杀"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
@@ -419,10 +419,25 @@ update_server() {
         git -C "$SRC_DIR" branch --set-upstream-to=origin/master master
     fi
 
+    # 关键：源码已同步到最新，但当前进程仍是「旧脚本」的内存逻辑。
+    # 重新执行磁盘上的最新 install.sh，确保后续停旧容器/重建用的是最新代码，
+    # 避免「拉了新代码却跑着旧脚本」导致端口冲突等问题。用 SP_REEXECED 防自循环。
+    if [[ -z "${SP_REEXECED:-}" && -f "$SRC_DIR/install.sh" ]]; then
+        echo -e "${YELLOW}[信息] 重新加载磁盘上的最新 install.sh 以应用更新…${NC}"
+        SP_REEXECED=1 exec bash "$SRC_DIR/install.sh" --update-server
+    fi
+
     cd "$SRC_DIR/server"
     # 先停掉旧容器并释放端口，避免「端口已被占用」导致新容器起不来
     echo -e "${YELLOW}[信息] 停止旧容器并释放端口…${NC}"
-    docker compose down 2>/dev/null || true
+    docker compose down --remove-orphans 2>/dev/null || true
+    # 兜底：若 8080 仍被任意容器占用（孤儿容器 / 其它 compose 项目），强制移除
+    local _cid
+    _cid="$(docker ps -q --filter "publish=8080" 2>/dev/null | head -n1)"
+    if [[ -n "$_cid" ]]; then
+        echo -e "${YELLOW}[信息] 检测到 8080 仍被容器 $_cid 占用，强制移除…${NC}"
+        docker rm -f "$_cid" 2>/dev/null || true
+    fi
     echo -e "${YELLOW}[信息] 重建并重启服务端…${NC}"
     docker compose up -d --build
     echo -e "${GREEN}[OK]   服务端已更新并重启${NC}"
