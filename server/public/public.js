@@ -37,7 +37,8 @@ function probeClass(ms) {
   if (ms == null) return 'probe-na';
   if (ms <= 50) return 'probe-ok';
   if (ms <= 200) return 'probe-mid';
-  return 'probe-warn';
+  if (ms <= 1000) return 'probe-warn';
+  return 'probe-bad';
 }
 function parseProbes(s) {
   if (!s) return {};
@@ -45,6 +46,22 @@ function parseProbes(s) {
   catch (e) { return {}; }
 }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
+function osShort(os) {
+  if (!os) return '—';
+  const l = os.toLowerCase();
+  if (l.includes('debian')) return 'Deb';
+  if (l.includes('ubuntu')) return 'Ubu';
+  if (l.includes('windows')) return 'Win';
+  if (l.includes('centos')) return 'Cent';
+  if (l.includes('alma')) return 'Alma';
+  if (l.includes('rocky')) return 'Rock';
+  if (l.includes('fedora')) return 'Fed';
+  if (l.includes('arch')) return 'Arch';
+  if (l.includes('alpine')) return 'Alp';
+  if (l.includes('freebsd')) return 'BSD';
+  if (l.includes('macos') || l.includes('darwin')) return 'Mac';
+  return os.split(' ')[0] || os.slice(0, 3);
+}
 function daysUntil(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + 'T00:00:00');
@@ -220,7 +237,7 @@ function pubListHtml(list) {
       <td class="ct-num ${a.online && a.mem_pct >= 90 ? 'danger' : (a.online && a.mem_pct >= 75 ? 'warn' : '')}">${fmtPct(a.mem_pct)}</td>
       <td class="ct-num ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</td>
       <td class="ct-num">${a.online ? fmtUptime(a.uptime) : '—'}</td>
-      <td class="ct-sub">${a.online ? esc(a.os || '') : '—'}</td>
+      <td class="ct-sub"><span class="os-badge">${esc(osShort(a.os))}</span> ${a.online ? esc(a.os || '') : '—'}</td>
       <td class="ct-num">↓${fmtRate(a.net_rx_rate)} ↑${fmtRate(a.net_tx_rate)}</td>
     </tr>`;
   }).join('');
@@ -276,7 +293,7 @@ function showPublicDetail(id, tr) {
 function renderPublic() {
   const ov = publicOverview;
   if ($('pvOverview')) {
-    if (ov) $('pvOverview').innerHTML = pvStat('客户端总数', ov.total) + pvStat('在线', ov.online, 'green') + pvStat('离线', ov.offline, 'red');
+    if (ov) { const tr = publicAgents.reduce((s,a)=>s+(a.net_rx_rate||0)+(a.net_tx_rate||0),0); $('pvOverview').innerHTML = pvStat('客户端总数', ov.total) + pvStat('在线', ov.online, 'green') + pvStat('离线', ov.offline, 'red') + pvStat('即时网速', `↓↑ ${fmtRate(tr)}`); }
     else $('pvOverview').innerHTML = '';
   }
   const grid = $('pvGrid'), list = $('pvList');
