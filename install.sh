@@ -22,6 +22,13 @@
 
 set -euo pipefail
 
+# ── 脚本版本（语义化）──────────────────────────────────────────────────────────
+# 每次修改本脚本行为，请同步 +1 版本号、更新日期与「本版要点」，方便用户对比是否
+# 需要更新，并在更新后直观了解改动内容。远端菜单会据此提示「发现新版」。
+SCRIPT_VERSION="1.1.0"
+SCRIPT_DATE="2026-07-10"
+SCRIPT_NOTES="更新服务端前先释放端口(修复8080占用)；脚本引入版本号与更新检查"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
 REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/simple-probe/master}"
@@ -107,6 +114,26 @@ download() {
         echo -e "${RED}[错误] 需要 curl 或 wget 才能下载文件${NC}" >&2
         return 1
     fi
+}
+
+# ── 版本工具 ───────────────────────────────────────────────────────────────────
+# 比较两个语义化版本：$1 > $2 时返回 0（真）。缺失/异常一律判否，避免误报新版。
+version_gt() {
+    [[ -n "$1" && -n "$2" && "$1" != "$2" ]] || return 1
+    [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" == "$1" ]]
+}
+
+# 抓取远端 install.sh 的 SCRIPT_VERSION（带短超时，静默失败返回空串，不阻塞菜单）。
+remote_script_version() {
+    local v=""
+    if command -v curl >/dev/null 2>&1; then
+        v="$(curl -fsSL --max-time 3 "$REPO_RAW/install.sh" 2>/dev/null \
+             | grep -m1 '^SCRIPT_VERSION=' | sed -E 's/^SCRIPT_VERSION="?([^"]*)"?.*/\1/')"
+    elif command -v wget >/dev/null 2>&1; then
+        v="$(wget -qO- --timeout=3 "$REPO_RAW/install.sh" 2>/dev/null \
+             | grep -m1 '^SCRIPT_VERSION=' | sed -E 's/^SCRIPT_VERSION="?([^"]*)"?.*/\1/')"
+    fi
+    printf '%s' "$v"
 }
 
 # ── 受控端安装 ─────────────────────────────────────────────────────────────────
@@ -320,6 +347,18 @@ update_script() {
         echo -e "${RED}[错误] 下载到的 install.sh 语法校验未通过，已放弃覆盖，当前脚本保持不变${NC}" >&2
         rm -f "$new"; return 1
     fi
+    # 展示版本变化与新版要点，让用户直观了解本次更新内容
+    local newver newnotes
+    newver="$(grep -m1 '^SCRIPT_VERSION=' "$new" | sed -E 's/^SCRIPT_VERSION="?([^"]*)"?.*/\1/')"
+    newnotes="$(grep -m1 '^SCRIPT_NOTES=' "$new" | sed -E 's/^SCRIPT_NOTES="?([^"]*)"?.*/\1/')"
+    if [[ -n "$newver" ]]; then
+        if version_gt "$newver" "$SCRIPT_VERSION"; then
+            echo -e "${GREEN}[更新] v${SCRIPT_VERSION} → v${newver}${NC}"
+        elif [[ "$newver" == "$SCRIPT_VERSION" ]]; then
+            echo -e "${YELLOW}[信息] 远端版本与当前一致 (v${SCRIPT_VERSION})，仍将覆盖为最新文件${NC}"
+        fi
+        [[ -n "$newnotes" ]] && echo -e "       要点: ${newnotes}"
+    fi
     local target
     if [[ -f "$0" && -w "$(dirname "$0")" ]]; then
         target="$(realpath "$0")"
@@ -355,9 +394,19 @@ update_server() {
 
     if [[ -d "$SRC_DIR/.git" ]]; then
         echo -e "${YELLOW}[信息] 拉取最新源码并同步到 master（丢弃本地对源码的改动）…${NC}"
+        local _old _new
+        _old="$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo '')"
         git -C "$SRC_DIR" fetch origin master -q
         git -C "$SRC_DIR" reset --hard origin/master
         git -C "$SRC_DIR" branch -u origin/master master 2>/dev/null || true
+        _new="$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo '')"
+        # 直观展示本次拉取了哪些提交（更新内容一目了然）
+        if [[ -n "$_old" && "$_old" != "$_new" ]]; then
+            echo -e "${GREEN}[更新] 源码 ${_old} → ${_new}，本次变更：${NC}"
+            git -C "$SRC_DIR" --no-pager log --oneline --no-decorate "${_old}..${_new}" | sed 's/^/       · /'
+        elif [[ "$_old" == "$_new" ]]; then
+            echo -e "${GREEN}[信息] 源码已是最新 (${_new})，无新提交${NC}"
+        fi
     else
         # 早期手动拷贝部署（无 .git）：改造为 git 跟踪，便于后续一键更新；
         # .env 等未跟踪文件不会被覆盖。
@@ -467,8 +516,16 @@ uninstall_all() {
 # ── 菜单 ───────────────────────────────────────────────────────────────────────
 show_menu() {
     echo ""
-    echo -e "${BLUE}━━━ Simple Probe 一键部署 ━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}━━━ Simple Probe 一键部署  v${SCRIPT_VERSION} (${SCRIPT_DATE}) ━━━━━━━━${NC}"
     echo -e "  系统: ${GREEN}$(detect_os)${NC}  架构: ${GREEN}$(detect_arch)${NC}"
+    echo -e "  本版要点: ${SCRIPT_NOTES}"
+    # 静默检查远端是否有新版（超时即跳过，不影响离线/弱网使用）
+    local _rv; _rv="$(remote_script_version)"
+    if version_gt "$_rv" "$SCRIPT_VERSION"; then
+        echo -e "  ${YELLOW}▲ 发现新版 v${_rv}（当前 v${SCRIPT_VERSION}），建议先选「4) 更新安装脚本」${NC}"
+    elif [[ -n "$_rv" ]]; then
+        echo -e "  ${GREEN}✓ 已是最新脚本 (v${SCRIPT_VERSION})${NC}"
+    fi
     echo ""
     echo "  1) 安装服务端 (Docker)"
     echo "  2) 安装受控端 Agent (systemd)"

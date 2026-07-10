@@ -1,5 +1,13 @@
 # Changelog
 
+## install.sh 版本化 + 更新检查 v1.1.0（2026-07-10）
+- 脚本引入语义化版本号：头部新增 `SCRIPT_VERSION` / `SCRIPT_DATE` / `SCRIPT_NOTES`（本版要点）。
+- 菜单横幅显示 `vX.Y.Z (日期) + 本版要点`；进菜单时静默拉取远端版本（3s 超时、失败即跳过），有新版黄字提示「▲ 发现新版，建议选 4) 更新安装脚本」，否则绿字「✓ 已是最新」。
+- 「4) 更新安装脚本」覆盖前显示 `旧版 → 新版` 与新版要点，直观了解改动。
+- 「5) 更新服务端」记录 git 旧/新短 commit，并列出本次拉取的提交（`git log --oneline old..new`），更新内容一目了然。
+- 修复：更新服务端重建前先 `docker compose down` 释放端口，避免 8080 被旧容器占用导致新容器起不来。
+- 维护约定：以后每次改脚本行为，同步 +1 版本号、更新日期与要点。
+
 ## 仓库卫生：从公开仓库移除测试 SQLite 库（2026-07-09）
 - 现象：公开仓库 `fengzone85/simple-probe` 的历史提交 `b27bc0a`（READONLY_TOKEN）曾把 `server/tmp_auth_test.db`、`server/tmp_http.db` 提交并 push。
 - 内容核实：
