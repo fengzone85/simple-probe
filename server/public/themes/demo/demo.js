@@ -9,6 +9,12 @@ async function load() {
   const title = meta.site_title || '状态页';
   document.title = title + ' · Status';
   if ($('title')) $('title').textContent = title;
+  // 「进入后台」链接统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
+  const $da = $('demoAdmin');
+  if ($da) {
+    const su = (meta && meta.site_url || '').trim();
+    $da.href = su ? (su.replace(/\/+$/, '') + '/admin.html') : '/admin.html';
+  }
   if (!enabled) { $('list').textContent = '本站暂未开放公开状态页'; if ($('ov')) $('ov').textContent = ''; return; }
   let agents = [], ov = {};
   try {

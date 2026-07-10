@@ -51,3 +51,12 @@ function countryName(code) {
   const f = COUNTRIES.find((c) => c.code === (code || '').toUpperCase());
   return f ? f.name : (code || '');
 }
+// 真实国旗图片（本地离线，不依赖外部 CDN）：Windows 不渲染 emoji 国旗（区域指示符），
+// 故改用打包在 public/flags/<code>.svg 的 SVG 国旗。加载失败时回退为两位国家代码文本。
+function flagImg(code, size) {
+  code = (code || '').toUpperCase();
+  if (!code || code.length !== 2) return '';
+  const lo = code.toLowerCase();
+  return `<img class="flag-img" loading="lazy" alt="${code}" title="${code}" src="/flags/${lo}.svg"` +
+    ` onerror="this.outerHTML='<span class=&quot;flag-code&quot;>${code}</span>'">`;
+}

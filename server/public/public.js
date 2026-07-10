@@ -41,6 +41,12 @@ async function initPublic() {
   const enabled = !!(meta && meta.public_enabled);
   const title = (meta && meta.site_title) || '自托管监控';
   if ($('pvTitle')) $('pvTitle').textContent = title;
+  // 「进入后台」链接统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
+  const $pa = $('pvAdmin');
+  if ($pa) {
+    const su = (meta && meta.site_url || '').trim();
+    $pa.href = su ? (su.replace(/\/+$/, '') + '/admin.html') : '/admin.html';
+  }
   document.title = title + ' · 状态页';
   if ($('pvFooter')) $('pvFooter').innerHTML = 'Powered by ' + esc(title) + ' · Build Time: ' + BUILD_TIME;
   if (!enabled) {
@@ -68,7 +74,7 @@ async function loadPublic() {
 // ---------- 渲染 ----------
 function pvStat(k, v, cls) { return `<div class="stat"><div class="k">${k}</div><div class="v ${cls || ''}">${v}</div></div>`; }
 function pubCardHtml(a) {
-  const flag = a.country && flagEmoji(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)}</span>` : '';
+  const flag = a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '';
   const statusCls = a.online ? 'on' : 'offline';
   const cpu = a.cpu, mem = a.mem_pct, disk = a.disk_pct;
   return `<div class="card pub-card">
@@ -85,7 +91,7 @@ function pubCardHtml(a) {
 function pubListHtml(list) {
   if (!list || !list.length) return '<div class="empty">暂无客户端数据</div>';
   const body = list.map(a => {
-    const flag = a.country && flagEmoji(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)}</span>` : '';
+    const flag = a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '';
     const statusCls = a.online ? 'on' : 'offline';
     return `<tr>
       <td><div class="ct-name"><span class="status ${statusCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · 离线'}</div></td>

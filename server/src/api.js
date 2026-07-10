@@ -231,6 +231,7 @@ router.get('/public/meta', (req, res) => {
   const ui = db.getUiSettings();
   res.json({
     site_title: ui.site_title || '',
+    site_url: ui.site_url || '',
     public_enabled: !!ui.public_enabled,
     home_layout: ui.home_layout || 'grid'
   });

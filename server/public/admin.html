@@ -29,18 +29,17 @@
       <nav class="side-nav">
         <button class="nav-item active" data-view="dashboard">📊 <span>仪表盘</span></button>
         <button class="nav-item" data-view="clients">🖥️ <span>客户端</span></button>
-        <button class="nav-item" data-view="set-basic">站点信息</button>
-        <button class="nav-item" data-view="set-theme">主题外观</button>
-        <button class="nav-item" data-view="set-notify">通知渠道</button>
-        <button class="nav-item" data-view="set-alert">告警规则</button>
-        <button class="nav-item" data-view="set-security">账户安全</button>
-        <button class="nav-item" data-view="set-public">公开与首页</button>
-        <button class="nav-item" data-view="set-skin">皮肤模板</button>
+        <button class="nav-item" data-view="set-basic">🌐 <span>站点信息</span></button>
+        <button class="nav-item" data-view="set-theme">🎨 <span>主题外观</span></button>
+        <button class="nav-item" data-view="set-notify">🔔 <span>通知渠道</span></button>
+        <button class="nav-item" data-view="set-alert">🚨 <span>告警规则</span></button>
+        <button class="nav-item" data-view="set-security">🔐 <span>账户安全</span></button>
+        <button class="nav-item" data-view="set-public">🌍 <span>公开与首页</span></button>
+        <button class="nav-item" data-view="set-skin">🧩 <span>皮肤模板</span></button>
         <button class="nav-item" id="navSecurity">🔒 <span>安全</span></button>
       </nav>
       <div class="side-foot">
         <button class="btn block" id="btnNew">+ 新建客户端</button>
-        <button class="btn ghost block" id="btnTheme" title="切换主题（暗/亮/跟随系统）">🌗 主题</button>
         <button class="btn ghost block" id="btnLogout" style="display:none">退出登录</button>
       </div>
     </aside>
@@ -51,7 +50,8 @@
           <h1 id="siteTitle">🛰️ 自托管监控<span class="dot">.</span></h1>
         </div>
         <div class="spacer"></div>
-        <a class="icon-btn" href="/" title="查看公开状态页（首页）">🏠</a>
+        <a class="icon-btn" id="btnHome" href="/" title="查看公开状态页（首页）">🏠</a>
+        <button class="icon-btn" id="btnTheme" title="切换主题（暗 / 亮）" aria-label="切换主题">🌙</button>
         <a class="icon-btn" id="btnGithub" href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener" title="GitHub">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.09.66-.22.66-.48 0-.24-.01-.87-.01-1.7-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.16.58.67.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
         </a>
@@ -94,9 +94,13 @@
 
             <div class="tab-pane" data-spane="basic">
               <div class="field"><label>站点名称</label><input id="s_site_title" placeholder="如 我的服务器监控" /></div>
-              <div class="field"><label>Agent 连接地址</label>
+              <div class="field"><label>项目网址</label>
+                <input id="s_site_url" placeholder="对外访问的公网地址，如 https://monitor.example.com" />
+                <p class="hint-sm">套了 CDN/WAF/反向代理（盾）的公网地址，用于前台与后台互跳链接，避免把内部直连地址暴露给访客。留空则使用当前域名。</p>
+              </div>
+              <div class="field"><label>Agent 专用连接地址</label>
                 <input id="s_agent_url" placeholder="留空则自动使用当前域名（例如 https://tz.222.blue:4443）" />
-                <p class="hint-sm">为安装脚本定义 Agent 的连接地址，方便 Web 与 Agent 使用不同域名/端口。留空则自动使用当前域名。</p>
+                <p class="hint-sm">仅供 Agent 上报与安装脚本使用的直连地址（通常未套盾）。请勿填入「项目网址」，也不要对外公开此地址。</p>
               </div>
               <div class="field"><label>自定义 CSS（保存后对所有访客生效，可实时预览）</label>
                 <textarea id="s_custom_css" rows="7" placeholder="例如： body{background:#0b0f17} .card{border-radius:16px;box-shadow:none}"></textarea>

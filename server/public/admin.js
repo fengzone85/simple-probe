@@ -157,6 +157,9 @@ function parseProbes(s) {
   try { const o = JSON.parse(s); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
   catch (e) { return {}; }
 }
+// 探测点运营商名缩写，缓解卡片 / 图例拥挤：联通=cu 电信=ct 移动=cm（公共保留）
+const PROBE_ABBR = { '联通': 'cu', '电信': 'ct', '移动': 'cm' };
+function probeLabel(l) { return PROBE_ABBR[l] || l; }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -321,7 +324,7 @@ function renderClients() {
     return `<tr data-id="${a.id}">
       <td><div class="ct-name"><span class="status ${dotCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.hostname || '')} · ${esc(a.os || '')}</div></td>
       <td>${a.group ? `<span class="ct-tag">${esc(a.group)}</span>` : '<span class="ct-sub">—</span>'}</td>
-      <td>${a.country && flagEmoji(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)}</span>` : '<span class="ct-sub">—</span>'}</td>
+      <td>${a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '<span class="ct-sub">—</span>'}</td>
       <td>${a.online ? `<span class="ct-num ${cpuCls}">${fmtPct(m.cpu)}</span>` : '<span class="ct-sub">离线</span>'}</td>
       <td>${a.online ? `<span class="ct-num ${memCls}">${fmtPct(m.mem_pct)}</span>` : '<span class="ct-sub">—</span>'}</td>
       <td>${a.online ? `<span class="ct-num ${diskCls}">${fmtPct(m.disk_pct)}</span>` : '<span class="ct-sub">—</span>'}</td>
@@ -349,7 +352,7 @@ function cardHtml(a, hist) {
     expireBadge = `<span class="badge ${cls}">${txt}</span>`;
   }
   const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
-  const countryBadge = (a.country && flagEmoji(a.country)) ? `<span class="badge flag" title="${esc(countryName(a.country))}">${flagEmoji(a.country)} ${esc(countryName(a.country))}</span>` : '';
+  const countryBadge = (a.country && flagImg(a.country)) ? `<span class="badge flag" title="${esc(countryName(a.country))}">${flagImg(a.country)} ${esc(countryName(a.country))}</span>` : '';
   // 计算告警态：CPU/内存超过设置阈值，或磁盘 >= 90%
   const al = getAlert();
   const alert = (m.cpu >= al.cpu_pct || m.mem_pct >= al.mem_pct || (m.disk_pct != null && m.disk_pct >= 90));
@@ -412,7 +415,7 @@ function cardHtml(a, hist) {
         <div class="m-info">
           <span class="m-lbl">网络</span>
           <span class="m-val">↓ ${fmtRate(m.net_rx_rate)} &nbsp;↑ ${fmtRate(m.net_tx_rate)}</span>
-          ${Object.keys(probes).length ? `<div class="probes">${Object.keys(probes).map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(l)} ${p && p.ok ? (p.ms != null ? p.ms + 'ms' : '✓') : '✕'}</span>`; }).join('')}</div>` : ''}
+          ${Object.keys(probes).length ? `<div class="probes">${Object.keys(probes).map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(probeLabel(l))} ${p && p.ok ? (p.ms != null ? p.ms + 'ms' : '✓') : '—'}</span>`; }).join('')}</div>` : ''}
         </div>
       </div>
     </div>
@@ -449,18 +452,25 @@ function fallbackCopy(text) {
   document.body.removeChild(ta);
 }
 
-// ---------- 主题切换（🌗 暗 / 亮 / 跟随系统） ----------
-const THEMES = ['auto', 'light', 'dark'];
+// ---------- 主题切换（顶部栏 🌙/☀️ 暗 / 亮 快速切换；设置内仍可选跟随系统） ----------
 function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
   else document.documentElement.removeAttribute('data-theme');
 }
-function cycleTheme() {
-  const cur = localStorage.getItem('theme') || 'auto';
-  const next = THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length];
+function updateThemeBtn() {
+  const b = $('btnTheme'); if (!b) return;
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  b.textContent = dark ? '☀️' : '🌙';
+  b.title = dark ? '切换到亮色' : '切换到暗色';
+}
+// 顶部栏按钮：在 暗 / 亮 之间一键切换（忽略 auto，保证点一下立即见效）
+function quickToggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = (cur === 'dark') ? 'light' : 'dark';
   localStorage.setItem('theme', next);
   applyTheme(next);
-  toast('主题：' + ({ auto: '跟随系统', light: '亮色', dark: '暗色' }[next]));
+  updateThemeBtn();
+  toast('主题：' + (next === 'dark' ? '暗色' : '亮色'));
 }
 
 // ---------- 拖拽排序（桌面端 HTML5 Drag；移动端仍用排序下拉 default_sort） ----------
@@ -524,7 +534,7 @@ async function loadDetail() {
   const probeSet = new Set();
   rows.forEach(r => { Object.keys(parseProbes(r.probes)).forEach(k => probeSet.add(k)); });
   const probeSeries = [...probeSet].map(label => ({
-    name: label,
+    name: probeLabel(label),
     data: rows.map(r => { const p = parseProbes(r.probes)[label]; return (p && p.ms != null) ? p.ms : null; })
   }));
 
@@ -764,7 +774,11 @@ async function openSettings() {
     appSettings = ui;
     const n = s.notify || {};
     $('s_site_title').value = appSettings.site_title || '';
+    $('s_site_url').value = appSettings.site_url || '';
     $('s_agent_url').value = appSettings.agent_server_url || '';
+    // 前台/后台互跳统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
+    const $home = $('btnHome');
+    if ($home) $home.href = (appSettings.site_url || '').trim() || '/';
     $('s_custom_css').value = appSettings.custom_css || '';
     $('s_default_sort').value = appSettings.default_sort || 'created';
     const al = appSettings.alert;
@@ -839,6 +853,7 @@ async function saveSettings() {
   const al = appSettings.alert || { cpu_pct: 90, mem_pct: 90, offline_sec: 60 };
   const ui = {
     site_title: $('s_site_title').value.trim(),
+    site_url: $('s_site_url').value.trim(),
     agent_server_url: $('s_agent_url').value.trim(),
     custom_css: $('s_custom_css').value,
     default_sort: $('s_default_sort').value,
@@ -939,7 +954,7 @@ function bindEvents() {
   $('navSecurity').addEventListener('click', () => openModal('securityModal'));
   $('btnSettingsBack').addEventListener('click', () => setView('dashboard'));
   populateCountrySelect();
-  $('btnTheme').addEventListener('click', cycleTheme);
+  $('btnTheme').addEventListener('click', quickToggleTheme);
   $('tfaToggle').addEventListener('click', start2FASetup);
   $('btnNew').addEventListener('click', openCreate);
   $('btnCreateSubmit').addEventListener('click', submitCreate);
@@ -1043,6 +1058,7 @@ $('panelReset').addEventListener('click', () => { if (detailId) openEdit(detailI
 $('panelDelete').addEventListener('click', () => { if (detailId) openEdit(detailId); setTimeout(() => $('btnDelete').click(), 50); });
 initRouter();
 applyTheme(localStorage.getItem('theme') || 'auto');
+updateThemeBtn();
 
 // ---------- 2FA (TOTP) ----------
 async function load2FAStatus() {

@@ -62,38 +62,43 @@ def parse_probe_targets(spec):
     return out
 
 
-def probe_one(host, port=53, timeout=2):
+def probe_one(host, port=53, timeout=3, retries=1):
     """Measure RTT (ms) to host. Prefer ICMP (system ping); fall back to TCP.
 
-    Returns (ms: float|None, ok: bool). Pure network self-test; only RTT and
-    reachability are collected — no host fingerprint of any kind.
+    Retries once on failure to absorb transient jitter (brief 1-2s blips),
+    so an occasional dropped probe does not flip a carrier to X for one tick.
+    Returns (ms: float|None, ok: bool). No host fingerprint collected.
     """
-    if shutil.which('ping'):
-        if os.name == 'nt':
-            cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
-        else:
-            cmd = ['ping', '-c', '1', '-W', '2', host]
+    def _try():
+        if shutil.which('ping'):
+            if os.name == 'nt':
+                cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
+            else:
+                cmd = ['ping', '-c', '1', '-W', str(int(timeout)), host]
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
+                s = (out.stdout or '') + (out.stderr or '')
+                m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)
+                if not m:
+                    m = re.search(r'=\s*[\d.]+/[\d.]+/[\d.]+/[\d.]+\s*ms', s)
+                if m:
+                    val = float(m.group(1).replace(',', '.'))
+                    return round(val, 1), True
+            except Exception:
+                pass
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
-            s = (out.stdout or '') + (out.stderr or '')
-            m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)            # Windows
-            if not m:
-                m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+\s*ms', s)  # Linux avg
-            if m:
-                val = float(m.group(1).replace(',', '.'))
-                return round(val, 1), True
+            t0 = time.time()
+            with socket.create_connection((host, port), timeout=timeout):
+                ms = (time.time() - t0) * 1000.0
+            return round(ms, 1), True
         except Exception:
-            pass
-    # TCP fallback (no raw socket needed; works even if ICMP is blocked)
-    try:
-        t0 = time.time()
-        with socket.create_connection((host, port), timeout=timeout):
-            ms = (time.time() - t0) * 1000.0
-        return round(ms, 1), True
-    except Exception:
-        return None, False
-
-
+            return None, False
+    last = (None, False)
+    for _ in range(retries + 1):
+        last = _try()
+        if last[1]:
+            return last
+    return last
 def os_name():
     """Best-effort human-readable Windows edition, e.g. 'Windows 10 Pro 22H2'."""
     try:
