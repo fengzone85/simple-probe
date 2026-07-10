@@ -4,10 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 const totp = require('./totp');
-const ADMIN_TOKEN_FILE = path.join(__dirname, '..', 'data', 'admin_token.txt');
 function getAdminToken() {
   if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) return process.env.ADMIN_TOKEN;
-  try { return fs.readFileSync(ADMIN_TOKEN_FILE, 'utf-8').trim(); } catch (e) { return ''; }
+  const raw = db.getConfig('admin_token_raw');
+  if (raw) return raw;
+  try { return fs.readFileSync(path.join(__dirname, '..', 'data', 'admin_token.txt'), 'utf-8').trim(); } catch (e) { return ''; }
 }
 
 // 恒定时间比较，避免令牌比较的时序侧信道。

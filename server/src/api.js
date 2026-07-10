@@ -30,10 +30,12 @@ router.use(rateLimit);
 
 // ---- helpers ----
 const { num, str, validateReport } = require('./validate');
-const ADMIN_TOKEN_FILE = path.join(path.dirname(require.resolve('./db')), '..', 'data', 'admin_token.txt');
 function getAdminToken() {
   if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) return process.env.ADMIN_TOKEN;
-  try { return fs.readFileSync(ADMIN_TOKEN_FILE, 'utf-8').trim(); } catch (e) { return ''; }
+  const raw = db.getConfig('admin_token_raw');
+  if (raw) return raw;
+  // 兼容旧版文件 token（迁移到 DB 后可删）
+  try { return fs.readFileSync(path.join(path.dirname(require.resolve('./db')), '..', 'data', 'admin_token.txt'), 'utf-8').trim(); } catch (e) { return ''; }
 }
 
 // ---- 首次部署初始化向导 ----
@@ -43,9 +45,8 @@ router.get('/setup/status', (req, res) => {
 router.post('/setup/generate', (req, res) => {
   if (getAdminToken()) return res.status(400).json({ error: 'already initialized' });
   const token = 'adm_' + crypto.randomBytes(16).toString('hex');
-  fs.mkdirSync(path.dirname(ADMIN_TOKEN_FILE), { recursive: true });
-  fs.writeFileSync(ADMIN_TOKEN_FILE, token, 'utf-8');
-  console.log('[setup] 管理员 Token 已生成并保存到 ' + ADMIN_TOKEN_FILE);
+  db.setConfig('admin_token_raw', token);
+  console.log('[setup] 管理员 Token 已生成并保存到 DB');
   res.json({ token });
 });
 
