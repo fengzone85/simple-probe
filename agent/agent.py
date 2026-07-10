@@ -58,7 +58,16 @@ def send(payload, attempt=0):
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             # Static token can't self-heal: long backoff, no immediate retry.
-            print(f'[warn] auth rejected (HTTP {e.code}); backing off {AUTH_BACKOFF}s — check AGENT_TOKEN', file=sys.stderr)
+            # 把服务端返回的具体原因（unknown agent / bad token / unauthorized）一并打印，便于定位。
+            reason = ''
+            try:
+                err = json.loads(e.read().decode(errors='ignore') or '{}')
+                reason = err.get('error', '')
+            except Exception:
+                pass
+            reason = f' ({reason})' if reason else ''
+            print(f'[warn] auth rejected (HTTP {e.code}){reason}; backing off {AUTH_BACKOFF}s — '
+                  f'check AGENT_ID/AGENT_TOKEN matches server, or re-register', file=sys.stderr)
             time.sleep(AUTH_BACKOFF)
             return False
         print(f'[warn] report HTTP {e.code}: {e.read().decode(errors="ignore")}', file=sys.stderr)
