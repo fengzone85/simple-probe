@@ -64,7 +64,7 @@ sudo ./install.sh --install-agent --repo ${REPO_BASE} --server ${serverUrl} --id
   // Windows 版：一条 PowerShell 命令。外层用双引号、内部一律单引号，避免引号嵌套。
   // install.ps1 会自举下载 windows_agent.py/win_collector.py/requirements.txt 到
   // %ProgramData%\simple-probe-agent，并注册登录自启的计划任务。需以管理员身份运行。
-  const windows = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:TEMP 'sp-agent-install.ps1'; iwr '${REPO_BASE}/agent/windows/install.ps1' -OutFile $p -UseBasicParsing; & $p -RegisterTask -Repo '${REPO_BASE}/agent/windows' -ServerUrl '${serverUrl}' -AgentId '${agentId}' -AgentToken '${agentToken}' -Interval ${iv}"`;
+  const windows = `powershell -NoProfile -ExecutionPolicy Bypass -Command "\`$p=Join-Path \`$env:TEMP 'sp-agent-install.ps1'; iwr '${REPO_BASE}/agent/windows/install.ps1' -OutFile \`$p -UseBasicParsing; & \`$p -RegisterTask -Repo '${REPO_BASE}/agent/windows' -ServerUrl '${serverUrl}' -AgentId '${agentId}' -AgentToken '${agentToken}' -Interval ${iv}"`;
   return { server_url: serverUrl, native_cmd: native, docker_cmd: docker, windows_cmd: windows };
 }
 
