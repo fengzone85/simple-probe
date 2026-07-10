@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>状态页 · Status</title>
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <!-- 独立游客公开状态页（无需登录） -->
@@ -26,6 +26,10 @@
         <span class="toolbar-label">布局</span>
         <button class="btn ghost sm" data-pvlayout="grid">卡片</button>
         <button class="btn ghost sm" data-pvlayout="list">列表</button>
+        <span class="toolbar-sep"></span>
+        <span class="toolbar-label">模版</span>
+        <button class="btn ghost sm" data-pvtemplate="simple">简约</button>
+        <button class="btn ghost sm" data-pvtemplate="visual">视觉</button>
       </div>
       <section class="grid pv-grid" id="pvGrid"></section>
       <section class="pv-list" id="pvList" hidden></section>
@@ -33,7 +37,7 @@
     <footer class="pv-footer" id="pvFooter"></footer>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="flags.js?v=6"></script>
-  <script src="public.js?v=6"></script>
+  <script src="flags.js?v=7"></script>
+  <script src="public.js?v=7"></script>
 </body>
 </html>

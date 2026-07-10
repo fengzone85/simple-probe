@@ -226,6 +226,24 @@ router.get('/public/agents', (req, res) => {
   res.json(list);
 });
 
+// 公开历史曲线（脱敏，仅指标时序，无 token / 备注 / 商家等敏感字段）。
+// 供「视觉版」首页卡片渲染 sparkline。受 ui.public_enabled 控制。
+router.get('/public/agents/sparklines', (req, res) => {
+  const ui = db.getUiSettings();
+  if (!ui.public_enabled) return publicDisabled(res);
+  const sec = RANGES[req.query.range] || 21600;
+  const rows = db.getMetricsAll(Date.now() - sec * 1000);
+  const byAgent = {};
+  for (const r of rows) {
+    (byAgent[r.agent_id] || (byAgent[r.agent_id] = [])).push({
+      cpu: r.cpu, mem_pct: r.mem_pct, disk_pct: r.disk_pct,
+      net_rx_rate: r.net_rx_rate, net_tx_rate: r.net_tx_rate,
+      load1: r.load1, temp: r.temp, swap_pct: r.swap_pct, uptime: r.uptime
+    });
+  }
+  res.json(byAgent);
+});
+
 // 游客视图元信息（无需登录）：站点标题、是否开放、首页默认布局。
 router.get('/public/meta', (req, res) => {
   const ui = db.getUiSettings();
