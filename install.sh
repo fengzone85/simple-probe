@@ -371,6 +371,9 @@ update_server() {
     fi
 
     cd "$SRC_DIR/server"
+    # 先停掉旧容器并释放端口，避免「端口已被占用」导致新容器起不来
+    echo -e "${YELLOW}[信息] 停止旧容器并释放端口…${NC}"
+    docker compose down 2>/dev/null || true
     echo -e "${YELLOW}[信息] 重建并重启服务端…${NC}"
     docker compose up -d --build
     echo -e "${GREEN}[OK]   服务端已更新并重启${NC}"
