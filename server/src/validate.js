@@ -13,11 +13,11 @@ const validateReport = (b) => {
   if (typeof b !== 'object' || b === null) return null;
   return {
     cpu: num(b.cpu, 0, 100),
-    mem_used: num(b.mem_used, 0, 1024 * 1024 * 1024 * 1024),
-    mem_total: num(b.mem_total, 0, 1024 * 1024 * 1024 * 1024),
+    mem_used: num(b.mem_used, 0, 1024 * 1024 * 1024 * 1024 * 1024),
+    mem_total: num(b.mem_total, 0, 1024 * 1024 * 1024 * 1024 * 1024),
     mem_pct: num(b.mem_pct, 0, 100),
-    disk_used: num(b.disk_used, 0, 1024 * 1024 * 1024 * 1024),
-    disk_total: num(b.disk_total, 0, 1024 * 1024 * 1024 * 1024),
+    disk_used: num(b.disk_used, 0, 1024 * 1024 * 1024 * 1024 * 1024),
+    disk_total: num(b.disk_total, 0, 1024 * 1024 * 1024 * 1024 * 1024),
     disk_pct: num(b.disk_pct, 0, 100),
     load1: num(b.load1, 0, 1e6),
     load5: num(b.load5, 0, 1e6),
@@ -29,8 +29,8 @@ const validateReport = (b) => {
     uptime: num(b.uptime, 0, 1e12),
     // temp: null means "no sensor" — allowed; otherwise clamp to a plausible range.
     temp: (b.temp === null || b.temp === undefined) ? null : num(b.temp, -50, 200),
-    swap_used: num(b.swap_used, 0, 1024 * 1024 * 1024 * 1024),
-    swap_total: num(b.swap_total, 0, 1024 * 1024 * 1024 * 1024),
+    swap_used: num(b.swap_used, 0, 1024 * 1024 * 1024 * 1024 * 1024),
+    swap_total: num(b.swap_total, 0, 1024 * 1024 * 1024 * 1024 * 1024),
     swap_pct: num(b.swap_pct, 0, 100),
     // 网络质量自测结果（固定公共目标，Agent 本地写死，服务端不可下发）。
     // 校验为受控对象：键≤8、label≤24 字符，值含 ms(0..100000 或 null) 与 ok(bool)。
