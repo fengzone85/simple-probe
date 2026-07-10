@@ -179,6 +179,9 @@ function parseProbes(s) {
 }
 // 探测点运营商名缩写，缓解卡片 / 图例拥挤：联通=cu 电信=ct 移动=cm（公共保留）
 const PROBE_ABBR = { '联通': 'cu', '电信': 'ct', '移动': 'cm' };
+// 探测目标默认模版：用于新建/编辑客户端时预填，给用户一个正确格式的样例，避免格式写错。
+// 用户只需替换其中的 IP 即可（格式：标签:IP[:端口]，逗号分隔）。
+const DEFAULT_PROBE_TARGETS = '移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8';
 function probeLabel(l) { return PROBE_ABBR[l] || l; }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
 function daysUntil(dateStr) {
@@ -689,7 +692,8 @@ function populateCountrySelect() {
 function openCreate() {
   populateCountrySelect();
   if ($('c_country')) $('c_country').value = '';
-  if ($('c_probe_targets')) $('c_probe_targets').value = appSettings.probe_targets || '';
+  // 预填：优先用「设置」里的全局默认，否则用内置模版，确保用户看到的是正确格式，只需改 IP。
+  if ($('c_probe_targets')) $('c_probe_targets').value = appSettings.probe_targets || DEFAULT_PROBE_TARGETS;
   const btn = $('btnCreateSubmit');
   if (btn) { btn.dataset.done = ''; btn.textContent = '创建并生成 Token'; btn.disabled = false; }
   const res = $('createResult'); if (res) res.innerHTML = '';
@@ -772,7 +776,8 @@ async function openEdit(id) {
   $('e_group').value = a.group || '';
   $('e_country').value = a.country || '';
   $('e_note').value = a.note || '';
-  $('e_probe_targets').value = a.probe_targets || '';
+  // 该客户端已存值优先；无则回退全局默认 / 内置模版，保证输入框永远是可参照的正确格式。
+  $('e_probe_targets').value = a.probe_targets || appSettings.probe_targets || DEFAULT_PROBE_TARGETS;
   $('editResult').innerHTML = '';
   openModal('editModal');
 }
@@ -822,7 +827,7 @@ async function resetToken() {
 async function openModify() {
   if (!detailId) return;
   const a = await api(`/api/agents/${detailId}`).catch(() => null);
-  const cur = (a && a.probe_targets) || appSettings.probe_targets || '';
+  const cur = (a && a.probe_targets) || appSettings.probe_targets || DEFAULT_PROBE_TARGETS;
   const ta = $('modTargets');
   ta.value = cur;
   const gen = () => {

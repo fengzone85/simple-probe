@@ -285,7 +285,7 @@
       <div class="modal">
         <h2>新建客户端</h2>
         <div class="field"><label>名称</label><input id="c_name" placeholder="如 香港CN2-01" /></div>
-        <div class="field"><label>探测目标 (DNS，可留空用默认)</label><input id="c_probe_targets" placeholder="留空则采用「设置」里的默认探测目标" /></div>
+        <div class="field"><label>探测目标 (DNS)</label><input id="c_probe_targets" placeholder="格式 标签:IP[:端口]，逗号分隔" /><p class="hint-sm">已按模版预填，直接替换其中 IP 即可（保持 <code>标签:IP</code> 格式）。清空则采用「设置」里的默认。</p></div>
         <div class="row2">
           <div class="field"><label>商家</label><input id="c_merchant" placeholder="如 腾讯云 / 搬瓦工" /></div>
           <div class="field"><label>到期时间</label><input id="c_expire" type="date" /></div>
@@ -321,7 +321,7 @@
           <div class="field"><label>备注</label><input id="e_note" /></div>
         </div>
         <div class="field"><label>国家 / 地区（用于卡片国旗）</label><select id="e_country"></select></div>
-        <div class="field"><label>探测目标 (DNS)</label><input id="e_probe_targets" placeholder="空 = 采用默认；不同地区可单独填可达 DNS" /></div>
+        <div class="field"><label>探测目标 (DNS)</label><input id="e_probe_targets" placeholder="格式 标签:IP[:端口]，逗号分隔" /><p class="hint-sm">已预填当前值/模版，直接替换其中 IP 即可（保持 <code>标签:IP</code> 格式）。不同地区可单独填可达 DNS。</p></div>
         <div id="editResult"></div>
         <div class="actions">
           <button class="btn danger" id="btnDelete">删除</button>
