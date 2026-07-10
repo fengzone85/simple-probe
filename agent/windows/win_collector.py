@@ -62,43 +62,60 @@ def parse_probe_targets(spec):
     return out
 
 
-def probe_one(host, port=53, timeout=3, retries=1):
+def probe_one(host, port=443, timeout=2.5, retries=3):
     """Measure RTT (ms) to host. Prefer ICMP (system ping); fall back to TCP.
 
-    Retries once on failure to absorb transient jitter (brief 1-2s blips),
-    so an occasional dropped probe does not flip a carrier to X for one tick.
-    Returns (ms: float|None, ok: bool). No host fingerprint collected.
-    """
-    def _try():
+    宽松化（与 Linux agent/collector.py 保持一致）：TCP 回退依次尝试
+    443 / 80 / 目标端口，只要任一可连通即视为可达；并重试多次吸收单次抖动/
+    端口偶发不可达，避免把运营商探测点（cm/cu 等）轻易判为"中断"。
+    返回 (ms: float|None, ok: bool)。纯网络自测，只采 RTT 与可达性，不采任何
+    主机指纹。"""
+    def _icmp():
         if shutil.which('ping'):
-            if os.name == 'nt':
-                cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
-            else:
-                cmd = ['ping', '-c', '1', '-W', str(int(timeout)), host]
             try:
+                if os.name == 'nt':
+                    cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
+                else:
+                    cmd = ['ping', '-c', '1', '-W', str(int(timeout)), host]
                 out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
                 s = (out.stdout or '') + (out.stderr or '')
-                m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)
+                m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)            # Windows
                 if not m:
-                    m = re.search(r'=\s*[\d.]+/[\d.]+/[\d.]+/[\d.]+\s*ms', s)
+                    m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+\s*ms', s)  # Linux avg
                 if m:
-                    val = float(m.group(1).replace(',', '.'))
-                    return round(val, 1), True
+                    return round(float(m.group(1).replace(',', '.')), 1), True
+                # ICMP 通但 RTT 解析失败（个别系统输出格式差异）仍判可达，
+                # 避免把能 ping 通的运营商 DNS 误判为中断。Windows 的 ping 对
+                # 不可达也返回 0，故仅对非 nt 生效。
+                if out.returncode == 0 and os.name != 'nt':
+                    return None, True
             except Exception:
                 pass
-        try:
-            t0 = time.time()
-            with socket.create_connection((host, port), timeout=timeout):
-                ms = (time.time() - t0) * 1000.0
-            return round(ms, 1), True
-        except Exception:
-            return None, False
-    last = (None, False)
-    for _ in range(retries + 1):
-        last = _try()
-        if last[1]:
-            return last
-    return last
+        return None, False
+
+    def _tcp():
+        import socket as _sock
+        # 443/80 最常被放行；目标端口（如 DNS 的 53）作为最后兜底。
+        ports = [443, 80]
+        if port not in ports:
+            ports.append(port)
+        for p in ports:
+            try:
+                t0 = time.time()
+                with _sock.create_connection((host, p), timeout=timeout):
+                    return round((time.time() - t0) * 1000.0, 1), True
+            except Exception:
+                continue
+        return None, False
+
+    for _ in range(max(1, retries)):
+        ms, ok = _icmp()
+        if ok:
+            return ms, True
+        ms, ok = _tcp()
+        if ok:
+            return ms, True
+    return None, False
 def os_name():
     """Best-effort human-readable Windows edition, e.g. 'Windows 11 Pro 23H2'."""
     try:
