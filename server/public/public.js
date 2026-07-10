@@ -2,7 +2,7 @@
 
 // 独立游客公开状态页逻辑（与后台 app.js 物理分离，仅调用免登录的 /api/public/*）
 const $ = (id) => document.getElementById(id);
-const BUILD_TIME = '2026/06/21 20:56:11 (GMT+8)';
+const BUILD_TIME = '2026/07/08 00:00:00 (GMT+8)';
 let publicAgents = [];
 let publicLayout = 'grid';
 let publicTemplate = 'simple'; // 'simple' = 简约极简卡（无悬停）；'visual' = 视觉版（进度条+曲线+呼吸悬停）
@@ -46,21 +46,21 @@ function parseProbes(s) {
   catch (e) { return {}; }
 }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
-function osShort(os) {
-  if (!os) return '—';
+function osIcon(os) {
+  if (!os) return { abbr: '—', cls: '' };
   const l = os.toLowerCase();
-  if (l.includes('debian')) return 'Deb';
-  if (l.includes('ubuntu')) return 'Ubu';
-  if (l.includes('windows')) return 'Win';
-  if (l.includes('centos')) return 'Cent';
-  if (l.includes('alma')) return 'Alma';
-  if (l.includes('rocky')) return 'Rock';
-  if (l.includes('fedora')) return 'Fed';
-  if (l.includes('arch')) return 'Arch';
-  if (l.includes('alpine')) return 'Alp';
-  if (l.includes('freebsd')) return 'BSD';
-  if (l.includes('macos') || l.includes('darwin')) return 'Mac';
-  return os.split(' ')[0] || os.slice(0, 3);
+  if (l.includes('debian')) return { abbr: 'Deb', cls: 'os-deb' };
+  if (l.includes('ubuntu')) return { abbr: 'Ubu', cls: 'os-ubu' };
+  if (l.includes('windows')) return { abbr: 'Win', cls: 'os-win' };
+  if (l.includes('centos')) return { abbr: 'Cent', cls: 'os-cent' };
+  if (l.includes('alma')) return { abbr: 'Alma', cls: 'os-alma' };
+  if (l.includes('rocky')) return { abbr: 'Rock', cls: 'os-rock' };
+  if (l.includes('fedora')) return { abbr: 'Fed', cls: 'os-fed' };
+  if (l.includes('arch')) return { abbr: 'Arch', cls: 'os-arch' };
+  if (l.includes('alpine')) return { abbr: 'Alp', cls: 'os-alp' };
+  if (l.includes('freebsd')) return { abbr: 'BSD', cls: 'os-bsd' };
+  if (l.includes('macos') || l.includes('darwin')) return { abbr: 'Mac', cls: 'os-mac' };
+  return { abbr: os.split(' ')[0] || os.slice(0, 3), cls: 'os-oth' };
 }
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -237,7 +237,7 @@ function pubListHtml(list) {
       <td class="ct-num ${a.online && a.mem_pct >= 90 ? 'danger' : (a.online && a.mem_pct >= 75 ? 'warn' : '')}">${fmtPct(a.mem_pct)}</td>
       <td class="ct-num ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</td>
       <td class="ct-num">${a.online ? fmtUptime(a.uptime) : '—'}</td>
-      <td class="ct-sub"><span class="os-badge">${esc(osShort(a.os))}</span> ${a.online ? esc(a.os || '') : '—'}</td>
+      <td class="ct-sub">${a.online ? (() => { const o = osIcon(a.os); return `<span class="os-badge ${o.cls}">${esc(o.abbr)}</span> ${esc(a.os)}`; })() : '—'}</td>
       <td class="ct-num">↓${fmtRate(a.net_rx_rate)} ↑${fmtRate(a.net_tx_rate)}</td>
     </tr>`;
   }).join('');
