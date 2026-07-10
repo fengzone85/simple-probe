@@ -76,7 +76,12 @@ def disk_list(root='/'):
     """返回所有真实磁盘挂载点的使用率列表（用于多盘展示）。
     root: agent 根目录。裸跑为 '/'；Docker 形态为 '/host'，此时需读宿主机的
     /proc/mounts 并把挂载点拼回 /host 前缀再 statvfs，才能拿到真实各盘数据。
-    过滤 tmpfs/proc/sysfs/devtmpfs/cgroup 等伪文件系统，去重 bind mount。"""
+    过滤 tmpfs/proc/sysfs/devtmpfs/cgroup 等伪文件系统。
+
+    去重依据为底层文件系统标识 os.stat(mount).st_dev：同一物理盘（含其
+    bind 子挂载，如把宿主 /var/lib/simple-probe 挂进容器、或 LXC 子目录挂载）
+    的 st_dev 相同，会被合并为一条（保留最短的挂载点作为盘根）；不同物理盘
+    st_dev 不同，各自保留。这样不会出现"同一块盘被算成多块"的假多盘。"""
     if root in ('/', '', None):
         mounts_path = '/proc/mounts'
         prefix = ''
@@ -86,8 +91,8 @@ def disk_list(root='/'):
     if not os.path.exists(mounts_path):
         mounts_path = '/proc/mounts'
         prefix = ''
-    seen = set()
-    out = []
+    # 先收集所有候选（含底层设备号 st_dev），再按 st_dev 去重。
+    cands = []
     try:
         with open(mounts_path) as f:
             for line in f:
@@ -97,21 +102,30 @@ def disk_list(root='/'):
                 dev, mount, fstype = parts[0], parts[1], parts[2]
                 if fstype not in REAL_FS:
                     continue
-                if mount in seen:
-                    continue
-                seen.add(mount)
                 p = mount if not prefix else (prefix + '/' + mount.lstrip('/'))
                 try:
                     st = os.statvfs(p)
+                    fsdev = os.stat(p).st_dev
                 except Exception:
                     continue
                 total = st.f_blocks * st.f_frsize
                 free = st.f_bfree * st.f_frsize
                 used = max(0, total - free)
                 pct = (used / total * 100.0) if total else 0.0
-                out.append({'mount': mount, 'used': used, 'total': total, 'pct': round(pct, 2)})
+                cands.append({'mount': mount, 'used': used, 'total': total,
+                              'pct': round(pct, 2), 'dev': fsdev})
     except Exception:
         pass
+    # 按 st_dev 合并：同一物理盘只保留挂载点最短的一条。
+    best = {}
+    for c in cands:
+        d = c['dev']
+        if d not in best or len(c['mount']) < len(best[d]['mount']):
+            best[d] = c
+    out = [{'mount': c['mount'], 'used': c['used'], 'total': c['total'], 'pct': c['pct']}
+           for c in best.values()]
+    # 稳定排序：挂载点越短越靠前（/ 永远在最前）
+    out.sort(key=lambda x: (len(x['mount']), x['mount']))
     return out
 
 
