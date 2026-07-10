@@ -8,6 +8,18 @@ const { agentAuth, adminOrReadonly, adminOnly, requireAdmin, safeEqual, setSessi
 const totp = require('./totp');
 const alerts = require('./alerts');
 
+// 展示用 hostname 脱敏：带域名时只取最左标签（二级名），隐去后续域名；
+// 纯 IP / 无点则原样，避免误截。例：pt5.521.be -> pt5；192.168.1.10 -> 原样。
+function shortHost(h) {
+  if (!h) return '';
+  h = String(h).trim();
+  const i = h.indexOf('.');
+  if (i < 0) return h;                            // 无点（如 Feng / localhost）原样
+  const suffix = h.slice(i + 1);
+  if (/[a-zA-Z]/.test(suffix)) return h.slice(0, i); // 后缀含字母 => 域名，取二级名
+  return h;                                        // 后缀纯数字 => 疑似 IP，原样保留
+}
+
 // 应用层限流（兜底，不依赖 Nginx）：每 IP 每 10s 最多 20 次。
 // /report 已由 Nginx 单独限流，此处放行。trust proxy 已在 server.js 启用，req.ip 为真实客户端。
 const RATE_WINDOW = 10000, RATE_MAX = 20;
@@ -127,7 +139,7 @@ router.get('/agents', adminOrReadonly, (req, res) => {
   const list = db.getAgents().map((a) => {
     const latest = db.getLatestMetric(a.id);
     const online = a.last_seen && (now - a.last_seen) < offlineSec * 1000;
-    return Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null });
+    return Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null, hostname: shortHost(a.hostname) });
   });
   res.json(list);
 });
@@ -148,7 +160,7 @@ router.get('/agents/:id', adminOrReadonly, (req, res) => {
   const latest = db.getLatestMetric(a.id);
   const offlineSec = Number(process.env.OFFLINE_THRESHOLD_SEC || 60);
   const online = a.last_seen && (Date.now() - a.last_seen) < offlineSec * 1000;
-  res.json(Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null }));
+  res.json(Object.assign({}, a, { group: a.grp || '', online: !!online, latest: latest || null, hostname: shortHost(a.hostname) }));
 });
 
 // ---- Admin: metrics time-series ----
@@ -250,7 +262,7 @@ router.get('/public/agents', (req, res) => {
       uptime: m ? m.uptime : 0,
       os: (m && m.os) ? m.os : (a.os || ''),
       probes: m ? (m.probes || '') : '',
-      hostname: online ? (a.hostname || '') : '',
+      hostname: online ? shortHost(a.hostname) : '',
       merchant: a.merchant || '',
       expire_at: a.expire_at || '',
       note: a.note || '',

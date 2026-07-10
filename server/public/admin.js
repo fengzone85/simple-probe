@@ -132,6 +132,8 @@ function populateGroupDatalist() {
   const dl = $('groupList'); if (!dl) return;
   const set = new Set();
   currentAgents.forEach(a => { const g = (a.group || '').trim(); if (g) set.add(g); });
+  // 同时纳入「站点信息」里配置的分组，使新建分组在卡片编辑中可选
+  (appSettings.group_order || []).forEach(g => { g = (g || '').trim(); if (g) set.add(g); });
   dl.innerHTML = Array.from(set).map(g => `<option value="${esc(g)}">`).join('');
 }
 function toast(msg, type) {
@@ -312,17 +314,18 @@ function renderGrid(agents, histMap) {
     const g = (a.group || '').trim() || '未分组';
     (groups[g] || (groups[g] = [])).push(a);
   }
-  // 分组显示顺序：设置中的 group_order 优先，其余按名称，未分组置底
+  // 分组显示顺序：设置中的 group_order 优先（含尚未分配客户端的分组），其余按名称，未分组置底
   const order = appSettings.group_order || [];
   const keys = Object.keys(groups);
   const ordered = [];
-  for (const g of order) if (groups[g]) ordered.push(g);
+  for (const g of order) { const t = (g || '').trim(); if (t && !ordered.includes(t)) ordered.push(t); }
   for (const g of keys.filter(k => !order.includes(k)).sort((a, b) => a.localeCompare(b))) if (g !== '未分组') ordered.push(g);
   if (groups['未分组']) ordered.push('未分组');
 
   const customOrder = appSettings.custom_order || [];
   const html = ordered.map(g => {
-    const cardsArr = groups[g].slice().sort((a, b) => {
+    const members = groups[g] || [];
+    const cardsArr = members.slice().sort((a, b) => {
       const ia = customOrder.indexOf(a.id), ib = customOrder.indexOf(b.id);
       if (ia === -1 && ib === -1) return 0;
       if (ia === -1) return 1;
@@ -331,8 +334,8 @@ function renderGrid(agents, histMap) {
     });
     const cards = cardsArr.map(a => cardHtml(a, histMap[a.id] || [])).join('');
     return `<section class="group-section">
-      <h3 class="group-title">${esc(g)} <span class="group-count">${groups[g].length}</span></h3>
-      <div class="cards">${cards}</div>
+      <h3 class="group-title">${esc(g)} <span class="group-count">${members.length}</span></h3>
+      <div class="cards">${cards || '<div class="empty small">该分组暂无客户端</div>'}</div>
     </section>`;
   }).join('');
   grid.innerHTML = html;
