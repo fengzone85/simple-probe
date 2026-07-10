@@ -100,7 +100,7 @@ def probe_one(host, port=53, timeout=3, retries=1):
             return last
     return last
 def os_name():
-    """Best-effort human-readable Windows edition, e.g. 'Windows 10 Pro 22H2'."""
+    """Best-effort human-readable Windows edition, e.g. 'Windows 11 Pro 23H2'."""
     try:
         import winreg
         with winreg.OpenKey(
@@ -112,6 +112,13 @@ def os_name():
                 build = winreg.QueryValueEx(k, 'DisplayVersion')[0]
             except Exception:
                 build = ''
+            try:
+                cb = int(winreg.QueryValueEx(k, 'CurrentBuild')[0] or 0)
+                # Windows 11 has build >= 22000 (registry still says "Windows 10")
+                if cb >= 22000 and prod.startswith('Windows 10'):
+                    prod = prod.replace('Windows 10', 'Windows 11')
+            except Exception:
+                pass
             return (prod + (' ' + build if build else '')).strip()
     except Exception:
         pass
