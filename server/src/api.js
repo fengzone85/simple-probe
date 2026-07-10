@@ -216,10 +216,18 @@ router.get('/public/agents', (req, res) => {
       cpu: m ? m.cpu : null,
       mem_pct: m ? m.mem_pct : null,
       disk_pct: m ? m.disk_pct : null,
+      disk_used: m ? m.disk_used : 0,
+      disk_total: m ? m.disk_total : 0,
+      load1: m ? m.load1 : null,
+      temp: m ? m.temp : null,
+      swap_pct: m ? m.swap_pct : null,
+      net_rx_rate: m ? m.net_rx_rate : 0,
+      net_tx_rate: m ? m.net_tx_rate : 0,
       net_rx_month: m ? m.net_rx_month : 0,
       net_tx_month: m ? m.net_tx_month : 0,
       uptime: m ? m.uptime : 0,
       os: m ? (m.os || '') : '',
+      probes: m ? (m.probes || '') : '',
       hostname: online ? (a.hostname || '') : ''
     };
   });

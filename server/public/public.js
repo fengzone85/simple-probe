@@ -30,6 +30,21 @@ function pctClass(p) {
   if (p >= 75) return 'bar-warn';
   return '';
 }
+// ---------- 探测点 / 速率 辅助（与后台 admin.js 保持一致） ----------
+const PROBE_ABBR = { '联通': 'cu', '电信': 'ct', '移动': 'cm' };
+function probeLabel(l) { return PROBE_ABBR[l] || l; }
+function probeClass(ms) {
+  if (ms == null) return 'probe-na';
+  if (ms >= 300) return 'probe-bad';
+  if (ms >= 100) return 'probe-warn';
+  return 'probe-ok';
+}
+function parseProbes(s) {
+  if (!s) return {};
+  try { const o = JSON.parse(s); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; }
+  catch (e) { return {}; }
+}
+function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
 function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
   else document.documentElement.removeAttribute('data-theme');
@@ -98,36 +113,51 @@ function pubSparkline(values, color) {
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" />
   </svg>`;
 }
-// 视觉版单个指标：数值 + 进度条 + sparkline 曲线
-function vMetric(label, val, arr, color) {
-  const w = Math.max(0, Math.min(100, Number(val) || 0));
-  return `<div class="metric vmetric">
-    <div class="m-info"><span class="m-lbl">${label}</span><span class="m-val ${pctClass(val)}">${fmtPct(val)}</span></div>
-    <div class="pbar"><span class="pfill ${pctClass(val)}" style="width:${w}%"></span></div>
-    <div class="m-spark">${pubSparkline(arr, color)}</div>
-  </div>`;
-}
+// 视觉版卡片：与后台仪表盘卡片保持一致（CPU/内存/负载/温度/Swap 曲线 + 网络 + 探测点 + 硬盘条 + 悬停呼吸光晕）
 function pubCardHtml(a) {
   const flag = a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '';
   const statusCls = a.online ? 'on' : 'offline';
   const cpu = a.cpu, mem = a.mem_pct, disk = a.disk_pct;
 
-  // 视觉版：进度条 + 历史曲线 + 悬停呼吸光晕
+  // 视觉版：完整复刻后台卡片
   if (publicTemplate === 'visual') {
     const sp = publicSparklines[a.id] || [];
-    const cpuArr = sp.length ? sp.map(x => x.cpu) : [cpu];
-    const memArr = sp.length ? sp.map(x => x.mem_pct) : [mem];
-    const diskArr = sp.length ? sp.map(x => x.disk_pct) : [disk];
-    const cn = a.country ? countryName(a.country) : '';
-    const loc = (cn ? cn + ' · ' : '') + (a.online ? esc(a.hostname || '') : '离线');
-    return `<div class="card pub-card tpl-visual">
-      <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${flag}<span class="pc-loc">${esc(loc)}</span></div>
-      <div class="metrics vmetrics">
-        ${vMetric('CPU', cpu, cpuArr, '#5cb6a5')}
-        ${vMetric('内存', mem, memArr, '#6c9eff')}
-        ${vMetric('硬盘', disk, diskArr, '#f0b34b')}
+    const histOk = sp.length > 0;
+    const cpuArr = histOk ? sp.map(x => x.cpu) : [cpu];
+    const memArr = histOk ? sp.map(x => x.mem_pct) : [mem];
+    const rxArr = histOk ? sp.map(x => +(x.net_rx_rate / 1024).toFixed(1)) : [0];
+    const txArr = histOk ? sp.map(x => +(x.net_tx_rate / 1024).toFixed(1)) : [0];
+    const loadArr = histOk ? sp.map(x => x.load1) : [a.load1];
+    const tempArr = histOk ? sp.map(x => x.temp) : [a.temp];
+    const swapArr = histOk ? sp.map(x => x.swap_pct) : [a.swap_pct];
+    const countryBadge = (a.country && flagImg(a.country)) ? `<span class="badge flag" title="${esc(countryName(a.country))}">${flagImg(a.country)} ${esc(countryName(a.country))}</span>` : '';
+    const probes = parseProbes(a.probes);
+    const diskPct = a.disk_pct != null ? a.disk_pct : 0;
+    const diskCls = pctClass(diskPct);
+    return `<div class="card pub-card tpl-visual" data-id="${esc(a.id)}">
+      <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${countryBadge}</div>
+      <div class="meta">${esc(a.online ? (a.hostname || '') : '离线')}${a.os ? (' · ' + esc(a.os)) : ''}</div>
+      <div class="metrics">
+        <div class="metric"><div class="m-spark">${pubSparkline(cpuArr, '#5cb6a5')}</div><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(memArr, '#6c9eff')}</div><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">负载</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(tempArr, '#ff7a59')}</div><div class="m-info"><span class="m-lbl">温度</span><span class="m-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(swapArr, '#a06bff')}</div><div class="m-info"><span class="m-lbl">Swap</span><span class="m-val">${fmtPct(a.swap_pct)}</span></div></div>
+        <div class="metric metric-wide">
+          <div class="m-spark">${pubSparkline(rxArr, '#4dd591')}</div>
+          <div class="m-info">
+            <span class="m-lbl">网络</span>
+            <span class="m-val">↓ ${fmtRate(a.net_rx_rate)} &nbsp;↑ ${fmtRate(a.net_tx_rate)}</span>
+            ${Object.keys(probes).length ? `<div class="probes">${Object.keys(probes).map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(probeLabel(l))} ${p && p.ok ? (p.ms != null ? p.ms + 'ms' : '✓') : '—'}</span>`; }).join('')}</div>` : ''}
+          </div>
+        </div>
       </div>
-      <div class="foot"><span class="uptime">⏱ ${a.online ? fmtUptime(a.uptime) : '—'}</span><span class="ct-sub">↓↑ ${fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0))}</span></div>
+      <div class="disk-row">
+        <span class="m-lbl">硬盘</span>
+        <div class="bar"><i class="bar-i ${diskCls}" style="width:${diskPct}%"></i></div>
+        <span class="m-val ${diskCls}">${fmtPct(diskPct)} · ${fmtBytes(a.disk_used)}/${fmtBytes(a.disk_total)}</span>
+      </div>
+      <div class="foot"><span class="uptime">⏱ ${a.online ? fmtUptime(a.uptime) : '—'}</span></div>
     </div>`;
   }
 
