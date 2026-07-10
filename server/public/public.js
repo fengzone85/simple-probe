@@ -47,20 +47,20 @@ function parseProbes(s) {
 }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
 function osIcon(os) {
-  if (!os) return { abbr: '—', cls: '' };
+  if (!os) return null;
   const l = os.toLowerCase();
-  if (l.includes('debian')) return { abbr: 'Deb', cls: 'os-deb' };
-  if (l.includes('ubuntu')) return { abbr: 'Ubu', cls: 'os-ubu' };
-  if (l.includes('windows')) return { abbr: 'Win', cls: 'os-win' };
-  if (l.includes('centos')) return { abbr: 'Cent', cls: 'os-cent' };
-  if (l.includes('alma')) return { abbr: 'Alma', cls: 'os-alma' };
-  if (l.includes('rocky')) return { abbr: 'Rock', cls: 'os-rock' };
-  if (l.includes('fedora')) return { abbr: 'Fed', cls: 'os-fed' };
-  if (l.includes('arch')) return { abbr: 'Arch', cls: 'os-arch' };
-  if (l.includes('alpine')) return { abbr: 'Alp', cls: 'os-alp' };
-  if (l.includes('freebsd')) return { abbr: 'BSD', cls: 'os-bsd' };
-  if (l.includes('macos') || l.includes('darwin')) return { abbr: 'Mac', cls: 'os-mac' };
-  return { abbr: os.split(' ')[0] || os.slice(0, 3), cls: 'os-oth' };
+  if (l.includes('debian'))  return { file: 'os-debian.svg', alt: 'Debian' };
+  if (l.includes('ubuntu'))  return { file: 'os-ubuntu.svg', alt: 'Ubuntu' };
+  if (l.includes('windows')) return { file: 'os-windows.svg', alt: 'Windows' };
+  if (l.includes('centos'))  return { file: 'os-centos.svg', alt: 'CentOS' };
+  if (l.includes('alma'))    return { file: 'os-alma.svg', alt: 'AlmaLinux' };
+  if (l.includes('rocky'))   return { file: 'os-rocky.svg', alt: 'Rocky' };
+  if (l.includes('fedora'))  return { file: 'os-fedora.svg', alt: 'Fedora' };
+  if (l.includes('arch'))    return { file: 'os-arch.svg', alt: 'Arch' };
+  if (l.includes('alpine'))  return { file: 'os-alpine.svg', alt: 'Alpine' };
+  if (l.includes('freebsd')) return { file: 'os-freebsd.svg', alt: 'FreeBSD' };
+  if (l.includes('macos') || l.includes('darwin')) return { file: 'os-macos.svg', alt: 'macOS' };
+  return null;
 }
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -237,7 +237,7 @@ function pubListHtml(list) {
       <td class="ct-num ${a.online && a.mem_pct >= 90 ? 'danger' : (a.online && a.mem_pct >= 75 ? 'warn' : '')}">${fmtPct(a.mem_pct)}</td>
       <td class="ct-num ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</td>
       <td class="ct-num">${a.online ? fmtUptime(a.uptime) : '—'}</td>
-      <td class="ct-sub">${a.online ? (() => { const o = osIcon(a.os); return `<span class="os-badge ${o.cls}">${esc(o.abbr)}</span> ${esc(a.os)}`; })() : '—'}</td>
+      <td class="ct-sub">${a.online ? (() => { const o = osIcon(a.os); return (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })() : '—'}</td>
       <td class="ct-num">↓${fmtRate(a.net_rx_rate)} ↑${fmtRate(a.net_tx_rate)}</td>
     </tr>`;
   }).join('');
