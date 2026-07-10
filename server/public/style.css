@@ -307,7 +307,8 @@ body {
 #viewSettings h4 { margin: 16px 0 8px; font-size: 13px; color: var(--accent); }
 #viewSettings h4:first-child { margin-top: 0; }
 .ct-actions { white-space: nowrap; }
-.ct-actions .btn { margin: 2px 4px 2px 0; }
+.ct-action-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0; font-weight: 400; }
+.ct-action-btn:hover { text-decoration: underline; }
 
 /* ============ 安全 / 2FA / 分组顺序 ============ */
 .sec-body { font-size: 13px; line-height: 1.7; color: var(--text); }

@@ -331,9 +331,7 @@ function renderClients() {
       <td class="ct-num">${fmtBytes((m.net_rx_month || 0) + (m.net_tx_month || 0))}</td>
       <td class="ct-sub">${m.uptime ? fmtUptime(m.uptime) : '—'}</td>
       <td class="ct-actions">
-        <button class="btn ghost sm" data-edit="${a.id}">编辑</button>
-        <button class="btn ghost sm" data-reset="${a.id}">重置</button>
-        <button class="btn danger sm" data-del="${a.id}">删除</button>
+        <button class="ct-action-btn" data-edit="${a.id}">编辑</button>
       </td>
     </tr>`;
   }).join('');
