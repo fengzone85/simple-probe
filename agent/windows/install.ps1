@@ -102,3 +102,6 @@ Write-Host "  - 临时运行：python `"$InstallDir\windows_agent.py`""
 if (-not $RegisterTask) {
     Write-Host '  - 注册为服务：powershell -ExecutionPolicy Bypass -File install.ps1 -RegisterTask -ServerUrl <url> -AgentId <id> -AgentToken <token>'
 }
+# 立即启动 Agent（后台运行，隐藏窗口）
+Write-Host '正在启动 Agent ...'
+Start-Process -WindowStyle Hidden -FilePath "$InstallDir\run_scheduled.bat"
