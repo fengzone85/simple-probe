@@ -172,10 +172,25 @@ class WinCollector:
         mem_pct = vm.percent
 
         try:
-            du = psutil.disk_usage(self.disk_path)
-            disk_total = du.total
-            disk_used = du.used
-            disk_pct = du.percent
+            # 自动探测所有固定硬盘（disk_path 为 'C:\' 或空时走全盘检测）
+            paths = []
+            if self.disk_path and self.disk_path.strip() and self.disk_path.strip() != 'C:\\':
+                paths = [p.strip() for p in self.disk_path.split(',') if p.strip()]
+            else:
+                paths = [p.mountpoint for p in psutil.disk_partitions()
+                         if 'fixed' in (p.opts or '').lower()]
+            total_used = 0
+            total_total = 0
+            for p in paths:
+                try:
+                    du = psutil.disk_usage(p)
+                    total_used += du.used
+                    total_total += du.total
+                except Exception:
+                    pass
+            disk_total = total_total
+            disk_used = total_used
+            disk_pct = round(total_used / total_total * 100, 2) if total_total > 0 else 0.0
         except Exception:
             disk_total = disk_used = 0
             disk_pct = 0.0
