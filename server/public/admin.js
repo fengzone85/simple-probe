@@ -223,6 +223,28 @@ function sparkline(values, color) {
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" />
   </svg>`;
 }
+// 双线 sparkline（如磁盘 IO 读/写两条不同颜色线，共用同一纵坐标刻度）
+function sparkline2(rArr, wArr, rColor, wColor) {
+  const r = (rArr || []).filter(v => Number.isFinite(v));
+  const w = (wArr || []).filter(v => Number.isFinite(v));
+  if (!r.length && !w.length) return '';
+  const all = r.concat(w);
+  const max = Math.max(...all, 1e-9), min = Math.min(...all, 0);
+  const range = (max - min) || 1;
+  const W = 100, H = 26;
+  const pts = (arr) => {
+    if (!arr.length) return '';
+    return arr.map((v, i) => {
+      const x = (i / (arr.length - 1 || 1)) * W;
+      const y = H - ((v - min) / range) * (H - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+  };
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${r.length ? `<polyline points="${pts(r)}" fill="none" stroke="${rColor}" stroke-width="1.5" />` : ''}
+    ${w.length ? `<polyline points="${pts(w)}" fill="none" stroke="${wColor}" stroke-width="1.5" />` : ''}
+  </svg>`;
+}
 
 // ---------- overview ----------
 async function loadOverview() {
@@ -431,7 +453,7 @@ function cardHtml(a, hist) {
         </div>
       </div>
       <div class="metric">
-        <div class="m-spark">${sparkline(diskRArr, '#4ea5d9')}</div>
+        <div class="m-spark">${sparkline2(diskRArr, diskWArr, '#4ea5d9', '#ff9f59')}</div>
         <div class="m-info">
           <span class="m-lbl">io</span>
           <span class="m-val">${((m.disk_r_rate || 0) / 1048576).toFixed(2)}/${((m.disk_w_rate || 0) / 1048576).toFixed(2)}</span>

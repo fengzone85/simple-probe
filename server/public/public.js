@@ -161,6 +161,28 @@ function pubSparkline(values, color) {
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" />
   </svg>`;
 }
+// 双线 sparkline（如磁盘 IO 读/写两条不同颜色线，共用同一纵坐标刻度）
+function pubSparkline2(rArr, wArr, rColor, wColor) {
+  const r = (rArr || []).filter(v => Number.isFinite(v));
+  const w = (wArr || []).filter(v => Number.isFinite(v));
+  if (!r.length && !w.length) return '';
+  const all = r.concat(w);
+  const max = Math.max(...all, 1e-9), min = Math.min(...all, 0);
+  const range = (max - min) || 1;
+  const W = 100, H = 28;
+  const pts = (arr) => {
+    if (!arr.length) return '';
+    return arr.map((v, i) => {
+      const x = (i / (arr.length - 1 || 1)) * W;
+      const y = H - ((v - min) / range) * (H - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+  };
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${r.length ? `<polyline points="${pts(r)}" fill="none" stroke="${rColor}" stroke-width="1.5" />` : ''}
+    ${w.length ? `<polyline points="${pts(w)}" fill="none" stroke="${wColor}" stroke-width="1.5" />` : ''}
+  </svg>`;
+}
 // 视觉版卡片：与后台仪表盘卡片保持一致（CPU/内存/负载/温度/Swap 曲线 + 网络 + 探测点 + 硬盘条 + 悬停呼吸光晕）
 function pubCardHtml(a) {
   const flag = a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '';
@@ -202,7 +224,7 @@ function pubCardHtml(a) {
         <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? '进程' : '负载'}</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(tempArr, '#ff7a59')}</div><div class="m-info"><span class="m-lbl">温度</span><span class="m-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(swapArr, '#a06bff')}</div><div class="m-info"><span class="m-lbl">Swap</span><span class="m-val">${fmtPct(a.swap_pct)}</span></div></div>
-        <div class="metric"><div class="m-spark">${pubSparkline(diskRArr, '#4ea5d9')}</div><div class="m-info"><span class="m-lbl">io</span><span class="m-val">${((a.disk_r_rate || 0) / 1048576).toFixed(2)}/${((a.disk_w_rate || 0) / 1048576).toFixed(2)}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline2(diskRArr, diskWArr, '#4ea5d9', '#ff9f59')}</div><div class="m-info"><span class="m-lbl">io</span><span class="m-val">${((a.disk_r_rate || 0) / 1048576).toFixed(2)}/${((a.disk_w_rate || 0) / 1048576).toFixed(2)}</span></div></div>
         <div class="metric metric-wide">
           <div class="m-spark">${pubSparkline(rxArr, '#4dd591')}</div>
           <div class="m-info">
