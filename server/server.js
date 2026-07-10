@@ -23,12 +23,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// 启动期安全校验：Admin Token 过弱等于把后台钥匙留在门上，越早发现越好。
+// 启动期安全校验：Admin Token 过弱等于把后台钥匙留在门上。
+// 如果 .env 未设 ADMIN_TOKEN，首次访问时走 Web 初始化向导生成 Token（保存到 ./data/admin_token.txt）。
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-if (!ADMIN_TOKEN || ADMIN_TOKEN === 'change-me-admin-token' || ADMIN_TOKEN.length < 16) {
-  console.error('[fatal] ADMIN_TOKEN 未设置或过于薄弱（默认值 / 长度 < 16），拒绝启动。');
-  console.error('        请在 .env 中设置一个足够随机、至少 16 位的管理员 Token。');
-  process.exit(1);
+if (ADMIN_TOKEN && ADMIN_TOKEN !== 'change-me-admin-token' && ADMIN_TOKEN.length >= 16) {
+  console.log('[info] ADMIN_TOKEN 已从 .env 读取');
+} else {
+  console.warn('[warn] .env 中未设置 ADMIN_TOKEN，首次访问将走 Web 初始化向导。');
 }
 
 app.use(express.json({ limit: '16kb' }));

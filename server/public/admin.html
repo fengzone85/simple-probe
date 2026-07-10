@@ -22,6 +22,23 @@
     </div>
   </div>
 
+  <!-- 首次部署初始化向导 -->
+  <div id="setupPage" class="login-page" style="display:none">
+    <div class="login-card">
+      <div class="login-logo">🚀</div>
+      <h1>首次设置</h1>
+      <p class="login-sub">生成管理员 Token，请务必保存！</p>
+      <button class="btn block" id="btnSetupGenerate">生成管理员 Token</button>
+      <div id="setupResult" style="display:none;margin-top:12px">
+        <div class="token-show" id="setupTokenDisplay" style="font-size:13px;word-break:break-all"></div>
+        <p class="hint" style="color:var(--red);font-weight:700">⚠️ 此 Token 仅显示一次，丢失需重置！</p>
+        <p class="hint">请立即复制保存，后续使用此 Token 登录。</p>
+        <button class="btn block" id="btnSetupLogin">已保存，去登录</button>
+      </div>
+      <div class="login-err" id="setupErr"></div>
+    </div>
+  </div>
+
   <div id="app" hidden>
     <!-- 左侧栏导航（对标 Komari） -->
     <aside class="sidebar">

@@ -1,7 +1,14 @@
 'use strict';
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const db = require('./db');
 const totp = require('./totp');
+const ADMIN_TOKEN_FILE = path.join(__dirname, '..', 'data', 'admin_token.txt');
+function getAdminToken() {
+  if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) return process.env.ADMIN_TOKEN;
+  try { return fs.readFileSync(ADMIN_TOKEN_FILE, 'utf-8').trim(); } catch (e) { return ''; }
+}
 
 // 恒定时间比较，避免令牌比较的时序侧信道。
 // 先对两端统一做 SHA-256 哈希再比较固定长度摘要，消除「长度不等提前返回」暴露的
@@ -90,7 +97,7 @@ function resolveRole(req) {
   const sess = getSession(req);
   if (sess && sess.role === 'admin') return { role: 'admin', totp: !!sess.totp, via: 'cookie' };
   const at = req.header('X-Admin-Token');
-  if (at && safeEqual(at, process.env.ADMIN_TOKEN)) return { role: 'admin', totp: false, via: 'token' };
+  if (at && safeEqual(at, getAdminToken())) return { role: 'admin', totp: false, via: 'token' };
   const rt = req.header('X-Readonly-Token');
   const roTok = process.env.READONLY_TOKEN;
   if (rt && roTok && safeEqual(rt, roTok)) return { role: 'readonly', totp: false, via: 'token' };

@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const router = express.Router();
@@ -29,6 +30,24 @@ router.use(rateLimit);
 
 // ---- helpers ----
 const { num, str, validateReport } = require('./validate');
+const ADMIN_TOKEN_FILE = path.join(path.dirname(require.resolve('./db')), '..', 'data', 'admin_token.txt');
+function getAdminToken() {
+  if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) return process.env.ADMIN_TOKEN;
+  try { return fs.readFileSync(ADMIN_TOKEN_FILE, 'utf-8').trim(); } catch (e) { return ''; }
+}
+
+// ---- 首次部署初始化向导 ----
+router.get('/setup/status', (req, res) => {
+  res.json({ needs_setup: !getAdminToken() });
+});
+router.post('/setup/generate', (req, res) => {
+  if (getAdminToken()) return res.status(400).json({ error: 'already initialized' });
+  const token = 'adm_' + crypto.randomBytes(16).toString('hex');
+  fs.mkdirSync(path.dirname(ADMIN_TOKEN_FILE), { recursive: true });
+  fs.writeFileSync(ADMIN_TOKEN_FILE, token, 'utf-8');
+  console.log('[setup] 管理员 Token 已生成并保存到 ' + ADMIN_TOKEN_FILE);
+  res.json({ token });
+});
 
 // ---- 一键安装命令生成（Nezha 风格：服务端把地址 + 每客户端令牌预填进命令）----
 // 三条接入路径：① 原生版（Linux systemd + Python，install.sh 自举下载配套文件）；
@@ -368,7 +387,7 @@ router.post('/test-alert', adminOnly, async (req, res) => {
 // 登录后前端不再持有明文 Admin Token，凭证以 HttpOnly+Secure Cookie 维持，降低 XSS 窃取风险。
 router.post('/login', async (req, res) => {
   const { token, totp: code } = req.body || {};
-  if (!token || !safeEqual(token, process.env.ADMIN_TOKEN)) {
+  if (!token || !safeEqual(token, getAdminToken())) {
     return res.status(401).json({ error: 'invalid token' });
   }
   const need = db.is2FAEnabled();
