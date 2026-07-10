@@ -295,6 +295,11 @@ def probe_one(host, port=443, timeout=2.5, retries=3):
                     m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+/[\d.]+\s*ms', s)  # Linux avg
                 if m:
                     return round(float(m.group(1).replace(',', '.')), 1), True
+                # ICMP 通但 RTT 解析失败（个别系统输出格式差异）仍判可达，
+                # 避免把能 ping 通的运营商 DNS 误判为中断。Windows 的 ping 对
+                # 不可达也返回 0，故仅对非 nt 生效。
+                if out.returncode == 0 and os.name != 'nt':
+                    return None, True
             except Exception:
                 pass
         return None, False
