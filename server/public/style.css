@@ -447,6 +447,18 @@ body {
 .pub-card.tpl-visual .m-val { font-size: 11px; font-weight: 500; color: var(--text); }
 .pub-card.tpl-visual .disk-row .m-val { font-size: 11px; font-weight: 500; color: var(--text); }
 .pub-card.tpl-visual .probes { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.pub-card.tpl-visual .probe {
+  border: none; background: none; padding: 0; border-radius: 0;
+  font-family: inherit; font-size: 11px; font-weight: 500;
+}
+/* 悬停时在线绿点跟随卡片呼吸律动 */
+.pub-card.tpl-visual:hover .status.on {
+  animation: pulseGreen 2.4s ease-in-out infinite;
+}
+@keyframes pulseGreen {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(47,194,126,.18); }
+  50%      { box-shadow: 0 0 0 8px rgba(47,194,126,.38); }
+}
 .pv-list { padding: 14px 26px 0; }
 .pv-footer { text-align: center; color: var(--muted); font-size: 12px; padding: 26px; border-top: 1px solid var(--border); margin-top: 30px; }
 .flag { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }
