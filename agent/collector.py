@@ -129,6 +129,39 @@ def disk_list(root='/'):
     return out
 
 
+def disk_io_counters_robust():
+    """读取系统级磁盘 IO 累计字节数 (read_bytes, write_bytes)。
+    优先用 psutil；若 psutil 不可用或返回全 0（常见于容器/LXC 的 I/O 隔离、
+    或纯缓存空闲机），则直接解析 /proc/diskstats，累加各真实磁盘的扇区数
+    （×512 得字节），跳过 ram/loop/zram/dm-/md 等伪设备。返回 (r, w)。"""
+    try:
+        dio = psutil.disk_io_counters()
+        if dio and (dio.read_bytes or dio.write_bytes):
+            return dio.read_bytes, dio.write_bytes
+    except Exception:
+        pass
+    try:
+        tot_r = tot_w = 0
+        with open('/proc/diskstats') as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 11:
+                    continue
+                dev = parts[2]
+                if dev.startswith(('ram', 'loop', 'zram')) or 'dm-' in dev or dev.startswith('md'):
+                    continue
+                try:
+                    rsect = int(parts[5])   # 字段6: 读扇区数
+                    wsect = int(parts[9])   # 字段10: 写扇区数
+                except (IndexError, ValueError):
+                    continue
+                tot_r += rsect * 512
+                tot_w += wsect * 512
+        return tot_r, tot_w
+    except Exception:
+        return 0, 0
+
+
 def load_avg():
     parts = _read('/proc/loadavg').split()
     if len(parts) >= 3:
@@ -241,46 +274,54 @@ def parse_probe_targets(spec):
     return out
 
 
-def probe_one(host, port=53, timeout=3, retries=1):
+def probe_one(host, port=443, timeout=2.5, retries=3):
     """Measure RTT (ms) to host. Prefer ICMP (system ping); fall back to TCP.
 
-    Retries once on failure to absorb transient jitter (brief 1–2s blips), so
-    an occasional dropped probe doesn't flip a carrier to "✕" for a single tick.
-    Returns (ms: float|None, ok: bool). Pure network self-test; only RTT and
-    reachability are collected — no host fingerprint of any kind.
-    """
-    def _try():
+    宽松化：TCP 回退依次尝试 443 / 80 / 目标端口，只要任一可连通即视为可达；
+    并重试多次吸收单次抖动/端口偶发不可达，避免把运营商探测点（cm/cu 等）
+    轻易判为"中断"。返回 (ms: float|None, ok: bool)。纯网络自测，只采 RTT 与
+    可达性，不采任何主机指纹。"""
+    def _icmp():
         if shutil.which('ping'):
-            if os.name == 'nt':
-                cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
-            else:
-                cmd = ['ping', '-c', '1', '-W', str(int(timeout)), host]
             try:
+                if os.name == 'nt':
+                    cmd = ['ping', '-n', '1', '-w', str(int(timeout * 1000)), host]
+                else:
+                    cmd = ['ping', '-c', '1', '-W', str(int(timeout)), host]
                 out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
                 s = (out.stdout or '') + (out.stderr or '')
                 m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)            # Windows
                 if not m:
                     m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+/[\d.]+\s*ms', s)  # Linux avg
                 if m:
-                    val = float(m.group(1).replace(',', '.'))
-                    return round(val, 1), True
+                    return round(float(m.group(1).replace(',', '.')), 1), True
             except Exception:
                 pass
-        # TCP fallback (no raw socket needed; works in minimal containers)
-        try:
-            import socket as _sock
-            t0 = time.time()
-            with _sock.create_connection((host, port), timeout=timeout):
-                ms = (time.time() - t0) * 1000.0
-            return round(ms, 1), True
-        except Exception:
-            return None, False
-    last = (None, False)
-    for _ in range(retries + 1):
-        last = _try()
-        if last[1]:
-            return last
-    return last
+        return None, False
+
+    def _tcp():
+        import socket as _sock
+        # 443/80 最常被放行；目标端口（如 DNS 的 53）作为最后兜底。
+        ports = [443, 80]
+        if port not in ports:
+            ports.append(port)
+        for p in ports:
+            try:
+                t0 = time.time()
+                with _sock.create_connection((host, p), timeout=timeout):
+                    return round((time.time() - t0) * 1000.0, 1), True
+            except Exception:
+                continue
+        return None, False
+
+    for _ in range(max(1, retries)):
+        ms, ok = _icmp()
+        if ok:
+            return ms, True
+        ms, ok = _tcp()
+        if ok:
+            return ms, True
+    return None, False
 
 
 class Collector:
@@ -338,16 +379,14 @@ class Collector:
         # Disk I/O rate
         disk_r_rate = disk_w_rate = 0.0
         try:
-            dio = psutil.disk_io_counters()
-            if dio:
-                dr, dw = dio.read_bytes, dio.write_bytes
-                if self._disk_io_prev is not None and self._disk_io_prev_ts:
-                    dt = now - self._disk_io_prev_ts
-                    if dt > 0:
-                        disk_r_rate = max(0.0, (dr - self._disk_io_prev[0]) / dt)
-                        disk_w_rate = max(0.0, (dw - self._disk_io_prev[1]) / dt)
-                self._disk_io_prev = (dr, dw)
-                self._disk_io_prev_ts = now
+            dr, dw = disk_io_counters_robust()
+            if self._disk_io_prev is not None and self._disk_io_prev_ts:
+                dt = now - self._disk_io_prev_ts
+                if dt > 0:
+                    disk_r_rate = max(0.0, (dr - self._disk_io_prev[0]) / dt)
+                    disk_w_rate = max(0.0, (dw - self._disk_io_prev[1]) / dt)
+            self._disk_io_prev = (dr, dw)
+            self._disk_io_prev_ts = now
         except Exception:
             pass
 
