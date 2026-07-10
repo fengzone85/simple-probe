@@ -649,6 +649,10 @@ function renderInstallCmds(inst, pfx) {
       </div>`;
 }
 async function submitCreate() {
+  const btn = $('btnCreateSubmit');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = '创建中…';
+  $('createResult').innerHTML = '';
   try {
     const r = await api('/api/agents', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -668,6 +672,7 @@ async function submitCreate() {
     toast('创建成功，请复制安装命令');
     refresh();
   } catch (e) { toast('创建失败：' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '创建并生成 Token'; }
 }
 
 // ---------- edit ----------
@@ -1055,6 +1060,7 @@ window.addEventListener('resize', () => Object.values(charts).forEach(c => c.res
 $('dpBack').addEventListener('click', () => history.back());
 $('dpPrev').addEventListener('click', switchToPrev);
 $('dpNext').addEventListener('click', switchToNext);
+$('dpClose').addEventListener('click', () => history.back());
 $('panelEdit').addEventListener('click', () => { if (detailId) openEdit(detailId); });
 $('panelReset').addEventListener('click', () => { if (detailId) openEdit(detailId); $('btnResetToken').click(); });
 $('panelDelete').addEventListener('click', () => { if (detailId) openEdit(detailId); setTimeout(() => $('btnDelete').click(), 50); });
