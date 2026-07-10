@@ -213,17 +213,37 @@ function pubListHtml(list) {
   const body = list.map(a => {
     const flag = a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '';
     const statusCls = a.online ? 'on' : 'offline';
-    return `<tr>
+    return `<tr data-id="${a.id}">
       <td><div class="ct-name"><span class="status ${statusCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · 离线'}</div></td>
       <td>${flag || '<span class="ct-sub">—</span>'}</td>
       <td class="ct-num ${a.online && a.cpu >= 90 ? 'danger' : (a.online && a.cpu >= 75 ? 'warn' : '')}">${fmtPct(a.cpu)}</td>
       <td class="ct-num ${a.online && a.mem_pct >= 90 ? 'danger' : (a.online && a.mem_pct >= 75 ? 'warn' : '')}">${fmtPct(a.mem_pct)}</td>
       <td class="ct-num ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</td>
-      <td class="ct-num">${fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0))}</td>
+      <td class="ct-num">${a.online ? fmtUptime(a.uptime) : '—'}</td>
+      <td class="ct-sub">${a.online ? esc(a.os || '') : '—'}</td>
+      <td class="ct-num">↓${fmtRate(a.net_rx_rate)} ↑${fmtRate(a.net_tx_rate)}</td>
     </tr>`;
   }).join('');
-  return `<table class="ctable"><thead><tr><th>名称</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>本月流量</th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="ctable"><thead><tr><th>名称</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>在线时长</th><th>系统</th><th>实时网速</th></tr></thead><tbody>${body}</tbody></table>`;
 }
+// ---------- 列表行点击展开详情弹窗 ----------
+function showPublicDetail(id) {
+  const a = publicAgents.find(x => String(x.id) === String(id));
+  if (!a) return;
+  // 用视觉版卡片样式展示详情
+  const prev = publicTemplate;
+  publicTemplate = 'visual';
+  const cardHtml = pubCardHtml(a);
+  publicTemplate = prev;
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg show';
+  bg.innerHTML = `<div class="modal" style="max-width:420px">${cardHtml}<div class="actions" style="margin-top:10px"><button class="btn" data-close-detail>关闭</button></div></div>`;
+  bg.addEventListener('click', function(e) {
+    if (e.target === bg || e.target.closest('[data-close-detail]')) bg.remove();
+  });
+  document.body.appendChild(bg);
+}
+
 function renderPublic() {
   const ov = publicOverview;
   if ($('pvOverview')) {
@@ -264,6 +284,9 @@ function bindPublic() {
   document.querySelectorAll('[data-pvlayout]').forEach(b => b.addEventListener('click', () => setPublicLayout(b.getAttribute('data-pvlayout'))));
   document.querySelectorAll('[data-pvtemplate]').forEach(b => b.addEventListener('click', () => setPublicTemplate(b.getAttribute('data-pvtemplate'))));
   const tb = $('pvTheme'); if (tb) tb.addEventListener('click', quickToggleTheme);
+  // 列表行点击展开详情
+  const pl = $('pvList');
+  if (pl) pl.addEventListener('click', e => { const r = e.target.closest('tr[data-id]'); if (r) showPublicDetail(r.getAttribute('data-id')); });
 }
 bindPublic();
 initPublic();
