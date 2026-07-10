@@ -809,6 +809,7 @@ async function openSettings() {
     $('a_mem').value = al.mem_pct;
     $('a_offline').value = al.offline_sec;
     $('p_enabled').checked = !!appSettings.public_enabled;
+    $('s_allow_ips').value = appSettings.admin_allow_ips || '';
     populateThemeSelect();
     const hl = appSettings.home_layout || 'grid';
     document.querySelectorAll('input[name="homelayout"]').forEach(r => { r.checked = (r.value === hl); });
@@ -882,6 +883,7 @@ async function saveSettings() {
     default_sort: $('s_default_sort').value,
     group_order: appSettings.group_order || [],
     public_enabled: $('p_enabled') ? $('p_enabled').checked : false,
+    admin_allow_ips: $('s_allow_ips').value.trim(),
     home_layout: (document.querySelector('input[name="homelayout"]:checked') || {}).value || 'grid',
     public_theme: $('p_theme') ? $('p_theme').value : 'default',
     alert: {

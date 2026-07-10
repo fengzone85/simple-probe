@@ -153,9 +153,10 @@ function verifyTotpHeader(req) {
   return totp.verifyTOTP(secret, code);
 }
 
-// IP 白名单中间件。ADMIN_ALLOW_IPS=1.2.3.4,5.6.7.0/24 逗号分隔 IP 或 CIDR，未配置则全部放行。
+// IP 白名单中间件。从 DB uiSettings.admin_allow_ips 读取，支持逗号分隔 IP/CIDR，空则全放行。
 function ipWhitelist(req, res, next) {
-  const raw = process.env.ADMIN_ALLOW_IPS || '';
+  const raw = (db.getUiSettings().admin_allow_ips || '').trim();
+  if (!raw) return next();
   const ips = raw.split(',').map(s => s.trim()).filter(Boolean);
   if (ips.length === 0) return next();
   const ip = req.ip || req.socket.remoteAddress;
