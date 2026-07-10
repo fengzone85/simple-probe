@@ -357,13 +357,15 @@ function cardHtml(a, hist) {
   const al = getAlert();
   const alert = (m.cpu >= al.cpu_pct || m.mem_pct >= al.mem_pct || (m.disk_pct != null && m.disk_pct >= 90));
   const statusCls = a.online ? (alert ? 'alert' : 'on') : '';
-  const cpuArr = hist.map(x => x.cpu);
-  const memArr = hist.map(x => x.mem_pct);
-  const rxArr = hist.map(x => +(x.net_rx_rate / 1024).toFixed(1));
-  const txArr = hist.map(x => +(x.net_tx_rate / 1024).toFixed(1));
-  const loadArr = hist.map(x => x.load1);
-  const tempArr = hist.map(x => x.temp);
-  const swapArr = hist.map(x => x.swap_pct);
+  // 历史数组兜底：无 sparkline 历史时，用当前值画一条线，确保 CPU/内存等图形永不消失
+  const histOk = Array.isArray(hist) && hist.length > 0;
+  const cpuArr = histOk ? hist.map(x => x.cpu) : [m.cpu];
+  const memArr = histOk ? hist.map(x => x.mem_pct) : [m.mem_pct];
+  const rxArr = histOk ? hist.map(x => +(x.net_rx_rate / 1024).toFixed(1)) : [0];
+  const txArr = histOk ? hist.map(x => +(x.net_tx_rate / 1024).toFixed(1)) : [0];
+  const loadArr = histOk ? hist.map(x => x.load1) : [m.load1];
+  const tempArr = histOk ? hist.map(x => x.temp) : [m.temp];
+  const swapArr = histOk ? hist.map(x => x.swap_pct) : [m.swap_pct];
   const probes = parseProbes(m.probes);
   const diskPct = m.disk_pct != null ? m.disk_pct : 0;
   const diskCls = pctClass(diskPct);
