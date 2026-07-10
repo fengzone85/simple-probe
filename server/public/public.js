@@ -226,54 +226,51 @@ function pubListHtml(list) {
   }).join('');
   return `<table class="ctable"><thead><tr><th>名称</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>在线时长</th><th>系统</th><th>实时网速</th></tr></thead><tbody>${body}</tbody></table>`;
 }
-// ---------- 列表行点击侧滑展开详情 ----------
-function showPublicDetail(id) {
+// ---------- 列表行点击下方展开详情（Komari 风格）----------
+function showPublicDetail(id, tr) {
+  // 切换展开/折叠
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('expanded-row')) { next.remove(); tr.classList.remove('expanded'); return; }
+  // 移除其他展开行
+  document.querySelectorAll('#pvList .expanded-row').forEach(r => r.remove());
+  document.querySelectorAll('#pvList tr.expanded').forEach(r => r.classList.remove('expanded'));
   const a = publicAgents.find(x => String(x.id) === String(id));
   if (!a) return;
-  const ov = document.createElement('div'); ov.className = 'detail-overlay show';
-  const pn = document.createElement('div'); pn.className = 'detail-panel open';
-  const statusCls = a.online ? 'on' : 'offline';
+  tr.classList.add('expanded');
   const probes = parseProbes(a.probes);
   const probeKeys = Object.keys(probes);
-  pn.innerHTML = `<div class="dp-header">
-    <button class="btn ghost sm dp-back" id="pvDpBack">← 返回</button>
-    <span class="dp-title">${esc(a.name)}</span>
-  </div>
-  <div class="dp-body">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <span class="status ${statusCls}"></span><strong style="font-size:15px">${esc(a.name)}</strong>
+  const statusCls = a.online ? 'on' : 'offline';
+  const row = document.createElement('tr');
+  row.className = 'expanded-row';
+  row.innerHTML = `<td colspan="8"><div class="expand-content">
+    <div class="ex-header">
+      <span class="status ${statusCls}"></span>
+      <strong>${esc(a.name)}</strong>
       ${a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : ''}
       ${a.country && flagImg(a.country) ? `<span class="badge flag">${flagImg(a.country)} ${esc(countryName(a.country))}</span>` : ''}
       <span class="badge">${esc(a.hostname || '')}</span>
+      ${a.os ? `<span class="badge">${esc(a.os)}</span>` : ''}
     </div>
-    <div class="overview" style="grid-template-columns:repeat(3,1fr);padding:0">
-      <div class="stat"><div class="k">CPU</div><div class="v ${pctClass(a.cpu)}">${fmtPct(a.cpu)}</div></div>
-      <div class="stat"><div class="k">内存</div><div class="v ${pctClass(a.mem_pct)}">${fmtPct(a.mem_pct)}</div></div>
-      <div class="stat"><div class="k">硬盘</div><div class="v ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</div></div>
-      <div class="stat"><div class="k">负载</div><div class="v">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</div></div>
-      <div class="stat"><div class="k">温度</div><div class="v">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</div></div>
-      <div class="stat"><div class="k">Swap</div><div class="v">${fmtPct(a.swap_pct)}</div></div>
+    <div class="ex-stats">
+      <div class="ex-stat"><span class="ex-lbl">CPU</span><span class="ex-val ${pctClass(a.cpu)}">${fmtPct(a.cpu)}</span></div>
+      <div class="ex-stat"><span class="ex-lbl">内存</span><span class="ex-val ${pctClass(a.mem_pct)}">${fmtPct(a.mem_pct)}</span></div>
+      <div class="ex-stat"><span class="ex-lbl">硬盘</span><span class="ex-val ${pctClass(a.disk_pct)}">${fmtPct(a.disk_pct)}</span></div>
+      <div class="ex-stat"><span class="ex-lbl">负载</span><span class="ex-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div>
+      <div class="ex-stat"><span class="ex-lbl">温度</span><span class="ex-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div>
+      <div class="ex-stat"><span class="ex-lbl">Swap</span><span class="ex-val">${fmtPct(a.swap_pct)}</span></div>
     </div>
-    <div style="margin-top:12px">
-      <div class="m-lbl" style="margin-bottom:4px">网络</div>
-      <div style="display:flex;gap:14px;font-size:14px;font-weight:700;margin-bottom:8px">
-        <span style="color:var(--green)">↓ ${fmtRate(a.net_rx_rate)}</span>
-        <span style="color:var(--accent2)">↑ ${fmtRate(a.net_tx_rate)}</span>
+    <div class="ex-network">
+      <div class="ex-net-row">
+        <span class="ex-lbl">网络</span>
+        <span class="ex-rate" style="color:var(--green)">↓ ${fmtRate(a.net_rx_rate)}</span>
+        <span class="ex-rate" style="color:var(--accent2)">↑ ${fmtRate(a.net_tx_rate)}</span>
+        <span class="ex-lbl">⏱ ${a.online ? fmtUptime(a.uptime) : '—'}</span>
+        <span class="ex-lbl">↓↑ ${fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0))}</span>
       </div>
-      ${probeKeys.length ? `<div class="probes" style="grid-template-columns:repeat(4,1fr)">${probeKeys.map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(probeLabel(l))} ${p && p.ok ? (p.ms != null ? p.ms : '✓') : '—'}</span>`; }).join('')}</div>` : '<div class="hint" style="color:var(--muted)">暂无探测数据</div>'}
+      <div class="ex-probes">${probeKeys.length ? probeKeys.map(l => { const p = probes[l]; return `<span class="probe ${probeClass(p && p.ms)}">${esc(probeLabel(l))} ${p && p.ok ? (p.ms != null ? p.ms : '✓') : '—'}</span>`; }).join('') : '<span class="hint" style="color:var(--muted)">暂无探测数据</span>'}</div>
     </div>
-    <div style="margin-top:12px;display:flex;gap:12px;color:var(--muted);font-size:11px;flex-wrap:wrap">
-      <span>⏱ ${a.online ? fmtUptime(a.uptime) : '—'}</span>
-      <span>${a.os ? esc(a.os) : ''}</span>
-      <span>${fmtBytes(a.disk_used || 0)} / ${fmtBytes(a.disk_total || 0)}</span>
-      <span>↓↑ ${fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0))}</span>
-    </div>
-  </div>`;
-  function close() { ov.remove(); pn.remove(); }
-  ov.addEventListener('click', e => { if (e.target === ov) close(); });
-  pn.querySelector('#pvDpBack').addEventListener('click', close);
-  document.body.appendChild(ov);
-  document.body.appendChild(pn);
+  </div></td>`;
+  tr.after(row);
 }
 
 function renderPublic() {
@@ -318,7 +315,7 @@ function bindPublic() {
   const tb = $('pvTheme'); if (tb) tb.addEventListener('click', quickToggleTheme);
   // 列表行点击展开详情
   const pl = $('pvList');
-  if (pl) pl.addEventListener('click', e => { const r = e.target.closest('tr[data-id]'); if (r) showPublicDetail(r.getAttribute('data-id')); });
+  if (pl) pl.addEventListener('click', e => { const r = e.target.closest('tr[data-id]'); if (r) showPublicDetail(r.getAttribute('data-id'), r); });
 }
 bindPublic();
 initPublic();
