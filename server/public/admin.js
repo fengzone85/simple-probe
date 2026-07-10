@@ -672,7 +672,21 @@ function populateCountrySelect() {
   if (cs) cs.innerHTML = opts;
   if (es) es.innerHTML = opts;
 }
-function openCreate() { populateCountrySelect(); if ($('c_country')) $('c_country').value = ''; openModal('createModal'); }
+function openCreate() {
+  populateCountrySelect();
+  if ($('c_country')) $('c_country').value = '';
+  const btn = $('btnCreateSubmit');
+  if (btn) { btn.dataset.done = ''; btn.textContent = '创建并生成 Token'; btn.disabled = false; }
+  const res = $('createResult'); if (res) res.innerHTML = '';
+  disableCreateForm(false);
+  openModal('createModal');
+}
+// 创建成功后禁用表单，避免重复生成第二张客户端卡片
+function disableCreateForm(disabled) {
+  ['c_name', 'c_merchant', 'c_expire', 'c_quota', 'c_group', 'c_note', 'c_country'].forEach(id => {
+    const el = $(id); if (el) el.disabled = disabled;
+  });
+}
 // Nezha 风格三 tab 一键命令：Linux 原生 / Docker / Windows。
 // pfx 用于区分不同弹窗的 cmd 元素 id（创建=c，编辑/重置=e），避免重复 id。
 function renderInstallCmds(inst, pfx) {
@@ -701,6 +715,8 @@ function renderInstallCmds(inst, pfx) {
 async function submitCreate() {
   const btn = $('btnCreateSubmit');
   if (btn.disabled) return;
+  // 已经生成过 token：本次点击视为「完成 / 关闭」，避免重复创建第二张卡片
+  if (btn.dataset.done === '1') { closeModal('createModal'); return; }
   btn.disabled = true; btn.textContent = '创建中…';
   $('createResult').innerHTML = '';
   try {
@@ -721,8 +737,14 @@ async function submitCreate() {
       ${renderInstallCmds(inst, 'c')}`;
     toast('创建成功，请复制安装命令');
     refresh();
+    // 标记已完成：按钮变「完成」、表单锁定，再次点击只关闭弹窗
+    btn.dataset.done = '1';
+    disableCreateForm(true);
   } catch (e) { toast('创建失败：' + e.message); }
-  finally { btn.disabled = false; btn.textContent = '创建并生成 Token'; }
+  finally {
+    if (btn.dataset.done === '1') { btn.disabled = false; btn.textContent = '完成'; }
+    else { btn.disabled = false; btn.textContent = '创建并生成 Token'; }
+  }
 }
 
 // ---------- edit ----------
