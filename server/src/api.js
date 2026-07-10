@@ -245,7 +245,7 @@ router.get('/public/agents', (req, res) => {
       net_rx_month: m ? m.net_rx_month : 0,
       net_tx_month: m ? m.net_tx_month : 0,
       uptime: m ? m.uptime : 0,
-      os: m ? (m.os || '') : '',
+      os: (m && m.os) ? m.os : (a.os || ''),
       probes: m ? (m.probes || '') : '',
       hostname: online ? (a.hostname || '') : '',
       merchant: a.merchant || '',
