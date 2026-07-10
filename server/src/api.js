@@ -433,7 +433,7 @@ router.get('/agents/:id/commands', adminOnly, (req, res) => {
   const probeTargets = str(req.query.probe_targets, 600) || a.probe_targets || '';
   const install = buildInstallCommands(getPublicBaseUrl(req), a.id, '<token>', AGENT_INTERVAL_DEFAULT, probeTargets);
   const modify = buildModifyCommands(getPublicBaseUrl(req), a.id, probeTargets);
-  res.json({ id: a.id, probe_targets: probe_targets, install, modify });
+  res.json({ id: a.id, probe_targets: probeTargets, install, modify });
 });
 
 // ---- Admin: UI + 通知设置（持久化到 admin_config）----
