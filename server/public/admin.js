@@ -410,7 +410,7 @@ function cardHtml(a, hist) {
       <div class="metric">
         <div class="m-spark">${sparkline(loadArr, '#ffce5c')}</div>
         <div class="m-info">
-          <span class="m-lbl">负载</span>
+          <span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? '进程' : '负载'}</span>
           <span class="m-val">${m.load1 != null ? m.load1.toFixed(2) : '—'}</span>
         </div>
       </div>

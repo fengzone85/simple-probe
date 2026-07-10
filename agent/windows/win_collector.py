@@ -274,8 +274,8 @@ class WinCollector:
             'disk_used': disk_used,
             'disk_total': disk_total,
             'disk_pct': round(disk_pct, 2),
-            # Windows has no load average concept — placeholder 0.0.
-            'load1': 0.0, 'load5': 0.0, 'load15': 0.0,
+            # Windows has no load average concept — use process count as a meaningful proxy.
+            'load1': len(psutil.pids()), 'load5': 0.0, 'load15': 0.0,
             'temp': temp,
             'swap_used': swap_used,
             'swap_total': swap_total,
