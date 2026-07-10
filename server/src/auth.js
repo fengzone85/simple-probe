@@ -153,8 +153,37 @@ function verifyTotpHeader(req) {
   return totp.verifyTOTP(secret, code);
 }
 
+// IP 白名单中间件。ADMIN_ALLOW_IPS=1.2.3.4,5.6.7.0/24 逗号分隔 IP 或 CIDR，未配置则全部放行。
+function ipWhitelist(req, res, next) {
+  const raw = process.env.ADMIN_ALLOW_IPS || '';
+  const ips = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (ips.length === 0) return next();
+  const ip = req.ip || req.socket.remoteAddress;
+  if (ips.includes(ip)) return next();
+  for (const entry of ips) {
+    if (entry.includes('/')) {
+      const [range, bits] = entry.split('/');
+      const n = parseInt(bits);
+      if (ipInCIDR(ip, range, n)) return next();
+    }
+  }
+  return res.status(403).json({ error: 'ip not allowed' });
+}
+function ipInCIDR(ip, cidr, bits) {
+  const ipN = ipToInt(ip);
+  const cidrN = ipToInt(cidr);
+  if (ipN === null || cidrN === null) return false;
+  const mask = bits === 0 ? 0 : ~(2 ** (32 - bits) - 1);
+  return (ipN & mask) === (cidrN & mask);
+}
+function ipToInt(ip) {
+  const p = ip.split('.').map(Number);
+  if (p.length !== 4 || p.some(isNaN)) return null;
+  return ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+}
+
 module.exports = {
-  agentAuth, adminAuth, adminOrReadonly, adminOnly, requireAdmin,
+  agentAuth, adminAuth, adminOrReadonly, adminOnly, requireAdmin, ipWhitelist,
   safeEqual, signSession, verifySession, getSession,
   setSessionCookie, clearSessionCookie, COOKIE_NAME, SESSION_TTL,
   verifyTotpHeader,

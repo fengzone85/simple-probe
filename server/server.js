@@ -6,7 +6,7 @@ const db = require('./src/db');
 const api = require('./src/api');
 const komari = require('./src/komari');
 const alerts = require('./src/alerts');
-const { safeEqual } = require('./src/auth');
+const { safeEqual, ipWhitelist } = require('./src/auth');
 
 const app = express();
 // 信任前置反代（Nginx）的 X-Forwarded-*，使 req.ip 取到真实客户端 IP，
@@ -87,6 +87,11 @@ app.get('/metrics', (req, res) => {
   res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8').send(lines.join('\n') + '\n');
 });
 
+// IP 白名单：保护管理 API（公开接口 /public/* 和 /report 除外）
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/public/') || req.path === '/report') return next();
+  ipWhitelist(req, res, next);
+});
 app.use('/api', api);
 // Komari 兼容 API 层：让 Komari 社区皮肤可指向本服务（只读、脱敏，受 public_enabled 约束）
 app.use('/api', komari.router);
@@ -129,6 +134,8 @@ app.get('/', (req, res, next) => {
   }
   next();
 });
+// admin.html 受 IP 白名单保护
+app.get('/admin.html', ipWhitelist, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // periodic prune of old metrics
