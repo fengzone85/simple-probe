@@ -382,6 +382,8 @@ function cardHtml(a, hist) {
   const loadArr = histOk ? hist.map(x => x.load1) : [m.load1];
   const tempArr = histOk ? hist.map(x => x.temp) : [m.temp];
   const swapArr = histOk ? hist.map(x => x.swap_pct) : [m.swap_pct];
+  const diskRArr = histOk ? hist.map(x => +(x.disk_r_rate / 1024 / 1024).toFixed(1)) : [0];
+  const diskWArr = histOk ? hist.map(x => +(x.disk_w_rate / 1024 / 1024).toFixed(1)) : [0];
   const probes = parseProbes(m.probes);
   const diskPct = m.disk_pct != null ? m.disk_pct : 0;
   const diskCls = pctClass(diskPct);
@@ -426,6 +428,13 @@ function cardHtml(a, hist) {
         <div class="m-info">
           <span class="m-lbl">Swap</span>
           <span class="m-val">${fmtPct(m.swap_pct)}</span>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="m-spark">${sparkline(diskRArr, '#4ea5d9')}</div>
+        <div class="m-info">
+          <span class="m-lbl">磁盘IO</span>
+          <span class="m-val">R${fmtRate(m.disk_r_rate || 0)} W${fmtRate(m.disk_w_rate || 0)}</span>
         </div>
       </div>
       <div class="metric metric-wide">

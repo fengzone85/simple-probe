@@ -26,6 +26,8 @@ const validateReport = (b) => {
     net_tx_rate: num(b.net_tx_rate, 0, 1e15),
     net_rx_month: num(b.net_rx_month, 0, 1e18),
     net_tx_month: num(b.net_tx_month, 0, 1e18),
+    disk_r_rate: num(b.disk_r_rate, 0, 1e15),
+    disk_w_rate: num(b.disk_w_rate, 0, 1e15),
     uptime: num(b.uptime, 0, 1e12),
     // temp: null means "no sensor" — allowed; otherwise clamp to a plausible range.
     temp: (b.temp === null || b.temp === undefined) ? null : num(b.temp, -50, 200),

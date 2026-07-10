@@ -173,6 +173,8 @@ function pubCardHtml(a) {
     const loadArr = histOk ? sp.map(x => x.load1) : [a.load1];
     const tempArr = histOk ? sp.map(x => x.temp) : [a.temp];
     const swapArr = histOk ? sp.map(x => x.swap_pct) : [a.swap_pct];
+    const diskRArr = histOk ? sp.map(x => +(x.disk_r_rate / 1024 / 1024).toFixed(1)) : [0];
+    const diskWArr = histOk ? sp.map(x => +(x.disk_w_rate / 1024 / 1024).toFixed(1)) : [0];
     const d = daysUntil(a.expire_at);
     let expireBadge = '';
     if (d != null) {
@@ -195,6 +197,7 @@ function pubCardHtml(a) {
         <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? '进程' : '负载'}</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(tempArr, '#ff7a59')}</div><div class="m-info"><span class="m-lbl">温度</span><span class="m-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(swapArr, '#a06bff')}</div><div class="m-info"><span class="m-lbl">Swap</span><span class="m-val">${fmtPct(a.swap_pct)}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(diskRArr, '#4ea5d9')}</div><div class="m-info"><span class="m-lbl">磁盘IO</span><span class="m-val">R${fmtRate(a.disk_r_rate || 0)} W${fmtRate(a.disk_w_rate || 0)}</span></div></div>
         <div class="metric metric-wide">
           <div class="m-spark">${pubSparkline(rxArr, '#4dd591')}</div>
           <div class="m-info">

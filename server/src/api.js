@@ -237,6 +237,8 @@ router.get('/public/agents', (req, res) => {
       disk_pct: m ? m.disk_pct : null,
       disk_used: m ? m.disk_used : 0,
       disk_total: m ? m.disk_total : 0,
+      disk_r_rate: m ? m.disk_r_rate : 0,
+      disk_w_rate: m ? m.disk_w_rate : 0,
       load1: m ? m.load1 : null,
       temp: m ? m.temp : null,
       swap_pct: m ? m.swap_pct : null,
@@ -269,7 +271,8 @@ router.get('/public/agents/sparklines', (req, res) => {
     (byAgent[r.agent_id] || (byAgent[r.agent_id] = [])).push({
       cpu: r.cpu, mem_pct: r.mem_pct, disk_pct: r.disk_pct,
       net_rx_rate: r.net_rx_rate, net_tx_rate: r.net_tx_rate,
-      load1: r.load1, temp: r.temp, swap_pct: r.swap_pct, uptime: r.uptime
+      load1: r.load1, temp: r.temp, swap_pct: r.swap_pct, uptime: r.uptime,
+      disk_r_rate: r.disk_r_rate, disk_w_rate: r.disk_w_rate
     });
   }
   res.json(byAgent);

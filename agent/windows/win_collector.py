@@ -136,6 +136,8 @@ class WinCollector:
         self.probe_targets = probe_targets or []
         self._net_prev = None
         self._net_prev_ts = 0
+        self._disk_io_prev = None
+        self._disk_io_prev_ts = 0
         self._state = self._load_state()
         # Prime the CPU sample so the first collect() returns a real percentage.
         try:
@@ -213,6 +215,22 @@ class WinCollector:
         self._net_prev = (rx, tx)
         self._net_prev_ts = now
 
+        # Disk I/O rate
+        disk_r_rate = disk_w_rate = 0.0
+        try:
+            dio = psutil.disk_io_counters()
+            if dio:
+                dr, dw = dio.read_bytes, dio.write_bytes
+                if self._disk_io_prev is not None and self._disk_io_prev_ts:
+                    dt = now - self._disk_io_prev_ts
+                    if dt > 0:
+                        disk_r_rate = max(0.0, (dr - self._disk_io_prev[0]) / dt)
+                        disk_w_rate = max(0.0, (dw - self._disk_io_prev[1]) / dt)
+                self._disk_io_prev = (dr, dw)
+                self._disk_io_prev_ts = now
+        except Exception:
+            pass
+
         # Monthly cumulative traffic (persisted, survives restart, resets on month rollover).
         month_key = datetime.now().strftime('%Y-%m')
         st = self._state
@@ -284,5 +302,7 @@ class WinCollector:
             'net_tx_rate': tx_rate,
             'net_rx_month': st.get('month_rx', 0),
             'net_tx_month': st.get('month_tx', 0),
+            'disk_r_rate': disk_r_rate,
+            'disk_w_rate': disk_w_rate,
             'probes': probes
         }
