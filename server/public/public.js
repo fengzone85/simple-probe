@@ -48,7 +48,6 @@ function parseProbes(s) {
   catch (e) { return {}; }
 }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
-function fmtIoRate(bytes) { return ((Number(bytes) || 0) / 1048576).toFixed(2) + 'M'; }
 function osIcon(os) {
   if (!os) return null;
   const l = os.toLowerCase();
@@ -203,7 +202,7 @@ function pubCardHtml(a) {
         <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? '进程' : '负载'}</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(tempArr, '#ff7a59')}</div><div class="m-info"><span class="m-lbl">温度</span><span class="m-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(swapArr, '#a06bff')}</div><div class="m-info"><span class="m-lbl">Swap</span><span class="m-val">${fmtPct(a.swap_pct)}</span></div></div>
-        <div class="metric"><div class="m-spark">${pubSparkline(diskRArr, '#4ea5d9')}</div><div class="m-info"><span class="m-lbl">IO</span><span class="m-val">R${fmtIoRate(a.disk_r_rate || 0)} W${fmtIoRate(a.disk_w_rate || 0)}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(diskRArr, '#4ea5d9')}</div><div class="m-info"><span class="m-lbl">io</span><span class="m-val">${((a.disk_r_rate || 0) / 1048576).toFixed(2)}/${((a.disk_w_rate || 0) / 1048576).toFixed(2)}</span></div></div>
         <div class="metric metric-wide">
           <div class="m-spark">${pubSparkline(rxArr, '#4dd591')}</div>
           <div class="m-info">

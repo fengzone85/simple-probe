@@ -179,7 +179,6 @@ function parseProbes(s) {
 const PROBE_ABBR = { '联通': 'cu', '电信': 'ct', '移动': 'cm' };
 function probeLabel(l) { return PROBE_ABBR[l] || l; }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
-function fmtIoRate(bytes) { return ((Number(bytes) || 0) / 1048576).toFixed(2) + 'M'; }
 function daysUntil(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + 'T00:00:00');
@@ -434,8 +433,8 @@ function cardHtml(a, hist) {
       <div class="metric">
         <div class="m-spark">${sparkline(diskRArr, '#4ea5d9')}</div>
         <div class="m-info">
-          <span class="m-lbl">IO</span>
-          <span class="m-val">R${fmtIoRate(m.disk_r_rate || 0)} W${fmtIoRate(m.disk_w_rate || 0)}</span>
+          <span class="m-lbl">io</span>
+          <span class="m-val">${((m.disk_r_rate || 0) / 1048576).toFixed(2)}/${((m.disk_w_rate || 0) / 1048576).toFixed(2)}</span>
         </div>
       </div>
       <div class="metric metric-wide">
