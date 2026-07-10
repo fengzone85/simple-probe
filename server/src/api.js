@@ -279,15 +279,28 @@ router.get('/public/agents/sparklines', (req, res) => {
   res.json(byAgent);
 });
 
-// 游客视图元信息（无需登录）：站点标题、是否开放、首页默认布局。
+// 游客视图元信息（无需登录）：站点标题、是否开放、首页默认布局、卡片排序。
 router.get('/public/meta', (req, res) => {
   const ui = db.getUiSettings();
+  let agentOrder = [];
+  try { agentOrder = JSON.parse(db.getConfig('public_order') || '[]'); } catch (e) {}
   res.json({
     site_title: ui.site_title || '',
     site_url: ui.site_url || '',
     public_enabled: !!ui.public_enabled,
-    home_layout: ui.home_layout || 'grid'
+    home_layout: ui.home_layout || 'grid',
+    agent_order: Array.isArray(agentOrder) ? agentOrder : []
   });
+});
+
+// 游客页卡片自定义排序（需管理员会话，避免游客随意更改全局顺序）。
+// 管理员在前台拖拽后调用此接口，所有人访问即看到固定顺序。
+router.post('/public/order', adminOnly, (req, res) => {
+  const order = (req.body && Array.isArray(req.body.order))
+    ? req.body.order.filter(x => typeof x === 'string').slice(0, 2000)
+    : [];
+  db.setConfig('public_order', JSON.stringify(order));
+  res.json({ ok: true });
 });
 
 // 列出 public/themes/ 下的可用皮肤（供后台「皮肤模板」选择）。无需登录。

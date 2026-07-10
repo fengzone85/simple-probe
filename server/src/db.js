@@ -3,7 +3,14 @@ const path = require('path');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'monitor.db');
+// 数据库默认落盘位置：容器内若挂载了持久卷 /data（docker-compose 的 server-data），
+// 则写入 /data/monitor.db，确保重建容器后数据仍在；否则回退到本地 server/data（开发/裸跑）。
+const DB_PATH = process.env.DB_PATH || (() => {
+  try {
+    if (fs.existsSync('/data') && fs.statSync('/data').isDirectory()) return '/data/monitor.db';
+  } catch (e) {}
+  return path.join(__dirname, '..', 'data', 'monitor.db');
+})();
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);

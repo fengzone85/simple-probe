@@ -4,6 +4,8 @@
 const $ = (id) => document.getElementById(id);
 const BUILD_TIME = '2026/07/08 00:00:00 (GMT+8)';
 let publicAgents = [];
+let publicServerOrder = []; // 后台保存的全局卡片顺序（管理员拖拽后生效）
+let localOrder = [];        // 本机浏览器拖拽顺序（游客无管理员会话时的本地固定）
 let publicLayout = 'grid';
 let publicTemplate = 'simple'; // 'simple' = 简约极简卡（无悬停）；'visual' = 视觉版（进度条+曲线+呼吸悬停）
 let publicOverview = null;
@@ -46,6 +48,7 @@ function parseProbes(s) {
   catch (e) { return {}; }
 }
 function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
+function fmtIoRate(bytes) { return ((Number(bytes) || 0) / 1048576).toFixed(2) + 'M'; }
 function osIcon(os) {
   if (!os) return null;
   const l = os.toLowerCase();
@@ -99,6 +102,8 @@ async function initPublic() {
   let meta = null;
   try { meta = await (await fetch('/api/public/meta')).json(); } catch (e) {}
   const enabled = !!(meta && meta.public_enabled);
+  publicServerOrder = (meta && Array.isArray(meta.agent_order)) ? meta.agent_order : [];
+  try { const lo = JSON.parse(localStorage.getItem('pv_order') || '[]'); if (Array.isArray(lo)) localOrder = lo; } catch (e) {}
   const title = (meta && meta.site_title) || '自托管监控';
   if ($('pvTitle')) $('pvTitle').textContent = title;
   // 「进入后台」链接统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
@@ -132,6 +137,7 @@ async function loadPublic() {
         : Promise.resolve({})
     ]);
     publicOverview = ov; publicAgents = Array.isArray(ag) ? ag : [];
+    publicAgents = sortByOrder(publicAgents);
     publicSparklines = sp || {};
   } catch (e) { publicOverview = null; publicAgents = []; publicSparklines = {}; }
   renderPublic();
@@ -187,7 +193,7 @@ function pubCardHtml(a) {
     const probes = parseProbes(a.probes);
     const diskPct = a.disk_pct != null ? a.disk_pct : 0;
     const diskCls = pctClass(diskPct);
-    return `<div class="card pub-card tpl-visual" data-id="${esc(a.id)}">
+    return `<div class="card pub-card tpl-visual" data-id="${esc(a.id)}" draggable="true">
       <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${merchant}${expireBadge}${countryBadge}</div>
       <div class="meta">${esc(a.online ? (a.hostname || '') : '离线')}${a.online && a.os ? (() => { const o = osIcon(a.os); return ' · ' + (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })() : ''}</div>
       ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
@@ -197,7 +203,7 @@ function pubCardHtml(a) {
         <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? '进程' : '负载'}</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(tempArr, '#ff7a59')}</div><div class="m-info"><span class="m-lbl">温度</span><span class="m-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(swapArr, '#a06bff')}</div><div class="m-info"><span class="m-lbl">Swap</span><span class="m-val">${fmtPct(a.swap_pct)}</span></div></div>
-        <div class="metric"><div class="m-spark">${pubSparkline(diskRArr, '#4ea5d9')}</div><div class="m-info"><span class="m-lbl">磁盘IO</span><span class="m-val">R${fmtRate(a.disk_r_rate || 0)} W${fmtRate(a.disk_w_rate || 0)}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(diskRArr, '#4ea5d9')}</div><div class="m-info"><span class="m-lbl">IO</span><span class="m-val">R${fmtIoRate(a.disk_r_rate || 0)} W${fmtIoRate(a.disk_w_rate || 0)}</span></div></div>
         <div class="metric metric-wide">
           <div class="m-spark">${pubSparkline(rxArr, '#4dd591')}</div>
           <div class="m-info">
@@ -217,7 +223,7 @@ function pubCardHtml(a) {
   }
 
   // 简约版：仅基础信息，无任何悬停效果
-  return `<div class="card pub-card tpl-simple">
+  return `<div class="card pub-card tpl-simple" data-id="${esc(a.id)}" draggable="true">
     <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${flag}</div>
     <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '') + (a.os ? (' · ' + (() => { const o = osIcon(a.os); return (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })()) : '')) : ' · 离线'}</div>
     <div class="metrics">
@@ -328,11 +334,70 @@ function setPublicTemplate(v) {
   loadPublic(); // 视觉版需拉取历史曲线，简约版则清空
 }
 
+// ---------- 卡片拖拽排序（固定顺序） ----------
+function sortByOrder(list) {
+  const order = (localOrder && localOrder.length) ? localOrder : publicServerOrder;
+  if (!order || !order.length) return list;
+  const m = new Map(order.map((id, i) => [String(id), i]));
+  return [...list].sort((a, b) => {
+    const ia = m.has(String(a.id)) ? m.get(String(a.id)) : Infinity;
+    const ib = m.has(String(b.id)) ? m.get(String(b.id)) : Infinity;
+    return ia - ib;
+  });
+}
+function persistOrder() {
+  const order = publicAgents.map(a => String(a.id));
+  localOrder = order;
+  try { localStorage.setItem('pv_order', JSON.stringify(order)); } catch (e) {}
+  // 管理员会话存在时同步到服务器（所有人可见固定顺序），否则仅本机固定
+  fetch('/api/public/order', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order })
+  }).then(r => { if (r.ok) publicServerOrder = order; }).catch(() => {});
+}
+function bindGridDrag() {
+  const grid = $('pvGrid');
+  if (!grid) return;
+  let dragging = null;
+  grid.addEventListener('dragstart', e => {
+    const card = e.target.closest('.pub-card');
+    if (!card) return;
+    dragging = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', card.getAttribute('data-id')); } catch (_) {}
+  });
+  grid.addEventListener('dragend', e => {
+    const card = e.target.closest('.pub-card');
+    if (card) card.classList.remove('dragging');
+    if (dragging) {
+      // 按当前 DOM 顺序回写数组并持久化
+      const ids = [...grid.querySelectorAll('.pub-card')].map(el => el.getAttribute('data-id'));
+      const map = new Map(publicAgents.map(a => [String(a.id), a]));
+      publicAgents = ids.map(id => map.get(id)).filter(Boolean);
+      persistOrder();
+    }
+    dragging = null;
+  });
+  grid.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (!dragging) return;
+    const target = e.target.closest('.pub-card');
+    if (!target || target === dragging) return;
+    const box = target.getBoundingClientRect();
+    const after = (e.clientX - box.left) > box.width / 2 || (e.clientY - box.top) > box.height / 2;
+    if (after) grid.insertBefore(dragging, target.nextSibling);
+    else grid.insertBefore(dragging, target);
+  });
+}
+
 // ---------- 事件 ----------
 function bindPublic() {
   document.querySelectorAll('[data-pvlayout]').forEach(b => b.addEventListener('click', () => setPublicLayout(b.getAttribute('data-pvlayout'))));
   document.querySelectorAll('[data-pvtemplate]').forEach(b => b.addEventListener('click', () => setPublicTemplate(b.getAttribute('data-pvtemplate'))));
   const tb = $('pvTheme'); if (tb) tb.addEventListener('click', quickToggleTheme);
+  bindGridDrag();
   // 列表行点击展开详情
   const pl = $('pvList');
   if (pl) pl.addEventListener('click', e => { const r = e.target.closest('tr[data-id]'); if (r) showPublicDetail(r.getAttribute('data-id'), r); });

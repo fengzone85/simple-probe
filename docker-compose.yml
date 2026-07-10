@@ -17,6 +17,8 @@ services:
     # 快速测试为明文 http，需显式放行（生产经 Nginx+TLS 无需此变量）。
     environment:
       - ADMIN_ALLOW_HTTP=1
+      # 数据库写入持久卷 /data（server-data），重建容器后数据不丢失
+      - DB_PATH=/data/monitor.db
     ports:
       - "8080:8080"
     volumes:
