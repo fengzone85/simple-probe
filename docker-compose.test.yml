@@ -1,0 +1,27 @@
+# NAS 本地测试服务端（与生产 VPS 完全隔离）
+# 启动：docker compose -f docker-compose.test.yml up -d --build
+# 访问：http://192.168.1.11:8081
+#
+# 与原 docker-compose.yml 的区别（隔离三件套）：
+#   - 端口   : 对外 8081（避免与任何 8080 冲突）
+#   - 容器名 : simple-probe-server-test
+#   - 数据卷 : server-data-test（测试 DB 与生产不混）
+# 源码目录统一为 NAS 的 /vol1/1000/work/simple-probe
+
+services:
+  server:
+    build: ./server
+    container_name: simple-probe-server-test
+    restart: unless-stopped
+    env_file:
+      - ./server/.env          # 也可复制为 .env.test 用独立测试令牌
+    environment:
+      - ADMIN_ALLOW_HTTP=1     # 内网明文 http 测试用
+      - DB_PATH=/data/monitor.db
+    ports:
+      - "8081:8080"
+    volumes:
+      - server-data-test:/data
+
+volumes:
+  server-data-test:
