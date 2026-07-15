@@ -31,6 +31,26 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
+# ── 供应链完整性（L-6）────────────────────────────────────────────────────────
+# 下载配套文件后可选 SHA256 校验，防 CDN/中间人投毒。
+# 用法：先对已知良好版本算好各文件哈希（按下载顺序），
+#   $env:SP_AGENT_SHA256S = "哈希1,哈希2,哈希3"
+# 未设置则跳过校验（仍建议审阅下载内容）。
+function Test-FileSha256 {
+    param([string]$Path, [string]$Expected)
+    if (-not $Expected) { return $true }
+    $algo = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $hash = ($algo.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+    $algo.Dispose()
+    if ($hash -ne $Expected.Trim().ToLower()) {
+        Write-Error "校验和不符: $Path 期望 $Expected 实际 $hash"
+        return $false
+    }
+    Write-Host "[OK] SHA256 校验通过: $Path"
+    return $true
+}
+
 # 0) 自举：一键命令只单独下载了 install.ps1，同目录没有 agent 载荷。
 #    此时把配套文件下载到持久安装目录（%ProgramData%\simple-probe-agent），
 #    后续依赖安装 / 计划任务全部指向该目录（避免指向 TEMP 被清理）。
@@ -39,13 +59,18 @@ if (-not (Test-Path (Join-Path $ScriptDir 'windows_agent.py'))) {
     $InstallDir = Join-Path $env:ProgramData 'simple-probe-agent'
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     Write-Host "同目录未找到 windows_agent.py，正从 $Repo 下载配套文件到 $InstallDir ..."
-    foreach ($f in 'windows_agent.py', 'win_collector.py', 'requirements.txt') {
+    $files = 'windows_agent.py', 'win_collector.py', 'requirements.txt'
+    $expList = if ($env:SP_AGENT_SHA256S) { $env:SP_AGENT_SHA256S -split ',' } else { @() }
+    for ($i = 0; $i -lt $files.Count; $i++) {
+        $f = $files[$i]
         try {
             Invoke-WebRequest "$Repo/$f" -OutFile (Join-Path $InstallDir $f) -UseBasicParsing
         } catch {
             Write-Error "下载 $f 失败：$($_.Exception.Message)"
             exit 1
         }
+        $exp = if ($i -lt $expList.Count) { $expList[$i] } else { '' }
+        if (-not (Test-FileSha256 -Path (Join-Path $InstallDir $f) -Expected $exp)) { exit 1 }
     }
     Write-Host '配套文件下载完成。'
 }

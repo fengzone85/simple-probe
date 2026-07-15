@@ -120,7 +120,18 @@ async function loadAppSettings() {
     if ($('sortSelect')) $('sortSelect').value = appSettings.default_sort || 'created';
   } catch (e) { /* 未登录或非管理员忽略 */ }
 }
-function applyCustomCss() { const el = $('customCss'); if (el) el.textContent = appSettings.custom_css || ''; }
+function applyCustomCss() {
+  // 自定义 CSS 经同源 /custom.css 以 <link> 投放（M-1 修复：避免内联 <style> 被 CSP 拦截、
+  // 同时服务端已清洗）。带时间戳强制刷新，使保存后立即生效。
+  let link = $('customCssLink');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.id = 'customCssLink';
+    document.head.appendChild(link);
+  }
+  link.href = '/custom.css?t=' + Date.now();
+}
 function applySiteTitle() {
   const t = appSettings.site_title || '自托管监控';
   document.title = t + ' · Host Monitor';

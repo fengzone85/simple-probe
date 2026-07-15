@@ -12,6 +12,48 @@ set -euo pipefail
 # ── Colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'
 
+# ── 供应链完整性（L-6）────────────────────────────────────────────────────────
+# 下载后可选 SHA256 校验，防止 GitHub CDN / 中间人投毒。
+#   download <url> <out> [expected_sha256]   期望哈希缺省则跳过校验
+#   download_list <base> <dir> "<f1 f2 ...>" [<"exp1,exp2,...">]
+#     —— exps 与 files 按位置一一对应；缺失/留空则该文件不校验。
+# 用法示例（先对已知良好版本算好哈希）：
+#   SP_AGENT_SHA256S=$(sha256sum agent.py collector.py uninstall.sh | awk '{print $1}' | paste -sd,)
+sha256_of() { local f="$1"; (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f" 2>/dev/null) | awk '{print $1}'; }
+verify_sha256() {
+    local f="$1" exp="$2"
+    [[ -z "$exp" ]] && return 0
+    local got; got="$(sha256_of "$f")"
+    if [[ "$got" != "$exp" ]]; then
+        echo -e "${RED}[错误] 校验和不符：期望 ${exp}，实际 ${got}${NC}" >&2
+        return 1
+    fi
+    echo -e "${GREEN}[OK]   SHA256 校验通过: $f${NC}"
+    return 0
+}
+download() {
+    local url="$1" out="$2" exp="${3:-}"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$out"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$out" "$url"
+    else
+        echo -e "${RED}[错误] 需要 curl 或 wget 才能下载文件${NC}" >&2
+        return 1
+    fi || return 1
+    verify_sha256 "$out" "$exp"
+}
+download_list() {
+    local base="$1" dir="$2" files=($3) exps_csv="${4:-}"
+    local -a exps=()
+    [[ -n "$exps_csv" ]] && IFS=',' read -ra exps <<< "$exps_csv"
+    local i=0 f
+    for f in "${files[@]}"; do
+        if ! download "$base/$f" "$dir/$f" "${exps[$i]:-}"; then return 1; fi
+        i=$((i+1))
+    done
+}
+
 # ── Defaults ─────────────────────────────────────────────────────────────────
 INTERVAL=15
 REPO="https://raw.githubusercontent.com/fengzone85/simple-probe/master/agent"
@@ -248,15 +290,10 @@ mkdir -p /etc/simple-probe
 # ── 6b. 自举：经管道执行时同目录无 agent.py，从仓库下载配套文件 ──────────────
 if [[ ! -f "${SCRIPT_DIR}/agent.py" ]]; then
     echo -e "${YELLOW}[信息] 同目录未找到 agent.py，将从 ${REPO} 下载配套文件…${NC}"
-    for f in agent.py collector.py uninstall.sh; do
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "${REPO}/$f" -o "${SCRIPT_DIR}/$f" || { echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2; exit 1; }
-        elif command -v wget >/dev/null 2>&1; then
-            wget -qO "${SCRIPT_DIR}/$f" "${REPO}/$f" || { echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2; exit 1; }
-        else
-            echo -e "${RED}[错误] 需要 curl 或 wget 才能下载配套文件${NC}" >&2; exit 1
-        fi
-    done
+    # L-6：可用 SP_AGENT_SHA256S（按 "agent.py,collector.py,uninstall.sh" 顺序的哈希逗号串）校验
+    if ! download_list "$REPO" "$SCRIPT_DIR" "agent.py collector.py uninstall.sh" "${SP_AGENT_SHA256S:-}"; then
+        exit 1
+    fi
     echo -e "${GREEN}[OK]   已下载 agent.py / collector.py / uninstall.sh${NC}"
 fi
 

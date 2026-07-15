@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         working-directory: server
         run: npm install --no-audit --no-fund
+      - name: Run npm audit (dependency vulnerabilities)
+        working-directory: server
+        run: npm audit --audit-level=high
       - name: Run security unit tests
         working-directory: server
         run: npm test

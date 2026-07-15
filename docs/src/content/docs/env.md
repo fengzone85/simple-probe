@@ -12,12 +12,14 @@ description: 服务端与受控端环境变量参考
 | `PORT` | 否 | `3000` | HTTP 监听端口 |
 | `SETUP_TOKEN` | 首次 | — | 初始化管理员 Token |
 | `DB_PATH` | 否 | `./data/probe.db` | SQLite 数据库路径 |
-| `SESSION_SECRET` | 推荐 | 随机 | Session 签名密钥 |
+| `SESSION_SECRET` | **必填（生产）** | 随机 | Session Cookie 签名密钥。⚠️ 务必设为随机长字符串（`openssl rand -hex 32`），**切勿使用示例值**。留空则每次重启随机生成，所有已登录会话失效、且 Docker 重建后登录态丢失 |
 | `ALERT_INTERVAL` | 否 | `300` | 告警检查间隔（秒） |
 | `ALERT_OFFLINE_THRESHOLD` | 否 | `90` | 离线告警阈值（秒） |
 | `NODE_ENV` | 推荐 | — | 设为 `production` |
 | `RATE_LIMIT_WINDOW` | 否 | `60` | 限流窗口（秒） |
 | `RATE_LIMIT_MAX` | 否 | `60` | 限流最大请求 |
+
+> ⚠️ **安全提示**：`SESSION_SECRET` 用于 HMAC 签名 Dashboard 登录 Cookie。生产环境**必须**显式设置为随机长字符串并通过 `.env` / compose `environment` 固定。若依赖默认值（每次启动随机），一旦容器重建/重启，所有管理员会话立即失效、需重新登录；更严重的是，若多实例共享同一随机默认值则存在伪造会话风险。生成方式：`openssl rand -hex 32`。
 
 ## 受控端
 
@@ -63,7 +65,8 @@ services:
       - ./data:/app/data
     environment:
       - SETUP_TOKEN=change-me
-      - SESSION_SECRET=change-me-too
+      # ⚠️ 必须为随机长字符串，切勿使用示例值：openssl rand -hex 32
+      - SESSION_SECRET=请替换为随机值
       - NODE_ENV=production
       - ALERT_INTERVAL=300
     restart: unless-stopped

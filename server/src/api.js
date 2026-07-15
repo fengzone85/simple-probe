@@ -46,7 +46,7 @@ const rateLimit = (req, res, next) => {
 router.use(rateLimit);
 
 // ---- helpers ----
-const { num, str, validateReport } = require('./validate');
+const { num, str, validateReport, sanitizeCss } = require('./validate');
 function getAdminToken() {
   if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) return process.env.ADMIN_TOKEN;
   const raw = db.getConfig('admin_token_raw');
@@ -149,7 +149,22 @@ router.post('/report', agentAuth, (req, res) => {
 // 启用条件：服务端 .env 配置了 SETUP_TOKEN。受控端携带该令牌调用本端点，
 // 服务端自动创建客户端并返回 id/token，使 agent 安装做到「只填域名+密钥」。
 // 不建立任何指令通道——注册后 agent 仍只上报指标，服务端不持有其任何控制权。
-router.post('/setup/register', (req, res) => {
+// L-3：即便 SETUP_TOKEN 泄露，也对每个 IP 限流（默认每分钟 10 次），
+// 防暴力枚举 agent 名称 / 资源耗尽。全局 rateLimit 已做兜底，此处更严格。
+const REGISTER_WINDOW = 60000, REGISTER_MAX = 10;
+const registerHits = new Map();
+setInterval(() => registerHits.clear(), REGISTER_WINDOW).unref?.();
+const registerRateLimit = (req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  const now = Date.now();
+  let rec = registerHits.get(ip);
+  if (!rec || now > rec.reset) rec = { reset: now + REGISTER_WINDOW, count: 0 };
+  rec.count++;
+  registerHits.set(ip, rec);
+  if (rec.count > REGISTER_MAX) return res.status(429).json({ error: 'too many requests' });
+  next();
+};
+router.post('/setup/register', registerRateLimit, (req, res) => {
   const setupToken = process.env.SETUP_TOKEN;
   if (!setupToken) {
     return res.status(403).json({ error: '服务端未启用一键注册（未配置 SETUP_TOKEN）' });
@@ -447,7 +462,11 @@ router.get('/settings', adminOrReadonly, (req, res) => {
 });
 router.put('/settings', adminOnly, (req, res) => {
   const b = req.body || {};
-  if (b.ui && typeof b.ui === 'object') db.setUiSettings(b.ui);
+  if (b.ui && typeof b.ui === 'object') {
+    // M-1：自定义 CSS 在落库前清洗，杜绝 @import/url()/外链字体/脚本注入。
+    if (typeof b.ui.custom_css === 'string') b.ui.custom_css = sanitizeCss(b.ui.custom_css);
+    db.setUiSettings(b.ui);
+  }
   if (b.notify && typeof b.notify === 'object') db.setNotifyConfig(b.notify);
   res.json({ ok: true });
 });

@@ -18,6 +18,8 @@
 #     不执行任何第三方二进制；仍建议下载后先 `cat install.sh` 审查。
 #   - 受控端注册使用服务端 SETUP_TOKEN，仅用于创建客户端记录，不建立任何
 #     指令通道（agent 注册后依旧只上报指标）。
+#   - 供应链完整性（L-6）：更新本脚本时可用 `SP_INSTALL_SHA256=<已知良好哈希>`
+#     强制校验下载内容，防 CDN/中间人投毒；未设置则跳过校验（仍建议审阅）。
 # =============================================================================
 
 set -euo pipefail
@@ -104,8 +106,23 @@ detect_arch() {
     esac
 }
 
+# SHA256 校验（L-6 供应链完整性）：下载后若提供期望哈希则比对，不符立即放弃。
+# 用法：download <url> <out> [expected_sha256]
+# 期望哈希可经环境变量 SP_INSTALL_SHA256（自检更新）等传入；未提供则跳过校验。
+sha256_of() { local f="$1"; (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f" 2>/dev/null) | awk '{print $1}'; }
+verify_sha256() {
+    local f="$1" exp="$2"
+    [[ -z "$exp" ]] && return 0
+    local got; got="$(sha256_of "$f")"
+    if [[ "$got" != "$exp" ]]; then
+        echo -e "${RED}[错误] 校验和不符：期望 ${exp}，实际 ${got}${NC}" >&2
+        return 1
+    fi
+    echo -e "${GREEN}[OK]   SHA256 校验通过${NC}"
+    return 0
+}
 download() {
-    local url="$1" out="$2"
+    local url="$1" out="$2" exp="${3:-}"
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL "$url" -o "$out"
     elif command -v wget >/dev/null 2>&1; then
@@ -113,7 +130,19 @@ download() {
     else
         echo -e "${RED}[错误] 需要 curl 或 wget 才能下载文件${NC}" >&2
         return 1
-    fi
+    fi     || return 1
+    verify_sha256 "$out" "$exp"
+}
+# 批量下载并可选按位置校验（exps 与 files 一一对应，逗号分隔）。
+download_list() {
+    local base="$1" dir="$2" files=($3) exps_csv="${4:-}"
+    local -a exps=()
+    [[ -n "$exps_csv" ]] && IFS=',' read -ra exps <<< "$exps_csv"
+    local i=0 f
+    for f in "${files[@]}"; do
+        if ! download "$base/$f" "$dir/$f" "${exps[$i]:-}"; then return 1; fi
+        i=$((i+1))
+    done
 }
 
 # ── 版本工具 ───────────────────────────────────────────────────────────────────
@@ -158,12 +187,11 @@ install_agent() {
     # 单文件 curl 场景：下载 agent 载荷到临时目录后运行
     local tmp; tmp="$(mktemp -d)"
     echo -e "${YELLOW}[信息] 从 ${REPO_RAW}/agent 下载受控端载荷…${NC}"
-    for f in install.sh uninstall.sh agent.py collector.py simple-probe-agent.service; do
-        if ! download "$REPO_RAW/agent/$f" "$tmp/$f"; then
-            echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2
-            rm -rf "$tmp"; exit 1
-        fi
-    done
+    # L-6：可用 SP_AGENT_SHA256S（按序逗号串）对下载文件做 SHA256 校验
+    if ! download_list "$REPO_RAW/agent" "$tmp" "install.sh uninstall.sh agent.py collector.py simple-probe-agent.service" "${SP_AGENT_SHA256S:-}"; then
+        echo -e "${RED}[错误] 下载受控端载荷失败${NC}" >&2
+        rm -rf "$tmp"; exit 1
+    fi
     chmod +x "$tmp/install.sh"
     bash "$tmp/install.sh" "${args[@]}"
     rm -rf "$tmp"
@@ -339,7 +367,9 @@ update_script() {
     ensure_deps || return 1
     echo -e "${YELLOW}[信息] 下载最新 install.sh…${NC}"
     local new; new="$(mktemp)"
-    if ! download "$REPO_RAW/install.sh" "$new"; then
+    # L-6：若设置了 SP_INSTALL_SHA256（已知良好版本的哈希），下载后强制校验，
+    # 防止 GitHub CDN / 中间人投毒。用法：SP_INSTALL_SHA256=xxxx sudo bash install.sh --update-script
+    if ! download "$REPO_RAW/install.sh" "$new" "${SP_INSTALL_SHA256:-}"; then
         echo -e "${RED}[错误] 下载 install.sh 失败${NC}" >&2; rm -f "$new"; return 1
     fi
     # 安全闸：下载到的脚本若语法校验不通过，绝不覆盖当前可用脚本
@@ -471,12 +501,10 @@ update_agent() {
     # 强制从 GitHub 拉取最新 agent 载荷（无论本脚本是否本地旧版），保证更新到最新
     local tmp; tmp="$(mktemp -d)"
     echo -e "${YELLOW}[信息] 从 ${REPO_RAW}/agent 下载最新受控端载荷…${NC}"
-    for f in install.sh uninstall.sh agent.py collector.py simple-probe-agent.service; do
-        if ! download "$REPO_RAW/agent/$f" "$tmp/$f"; then
-            echo -e "${RED}[错误] 下载 $f 失败${NC}" >&2
-            rm -rf "$tmp"; return 1
-        fi
-    done
+    if ! download_list "$REPO_RAW/agent" "$tmp" "install.sh uninstall.sh agent.py collector.py simple-probe-agent.service" "${SP_AGENT_SHA256S:-}"; then
+        echo -e "${RED}[错误] 下载受控端载荷失败${NC}" >&2
+        rm -rf "$tmp"; return 1
+    fi
     chmod +x "$tmp/install.sh"
     # 复用受控端安装脚本，传入已存身份 → 覆盖 agent.py 等并重启服务
     bash "$tmp/install.sh" --server "$SERVER_URL" --id "$AGENT_ID" --token "$AGENT_TOKEN" --interval "$INTERVAL"

@@ -8,6 +8,51 @@ const num = (v, min, max) => {
 };
 const str = (v, max) => (typeof v === 'string' && v.length <= max ? v : '');
 
+// 管理员自定义 CSS 清洗：仅放行样式能力，杜绝外联资源加载与脚本注入。
+// 威胁模型（见安全审计 M-1）：admin 角色可写入 custom_css，需防止
+//   - @import / @font-face 外链、字体指纹追踪
+//   - url() 加载远程资源 / 数据外泄
+//   - expression() / javascript: 等历史 XSS 向量
+//   - behavior / -moz-binding 等危险属性
+// 做法：先剥离外链与脚本向量，再逐条声明校验属性名，丢弃非法/危险项。
+const CSS_MAX = 20000;
+const CSS_DANGEROUS_PROP = /^(|-moz-)?(behavior|binding)$/i;
+function sanitizeCss(input) {
+  if (typeof input !== 'string') return '';
+  let css = input.slice(0, CSS_MAX);
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');          // 注释
+  css = css.replace(/@import\b[^;]*;?/gi, '');          // @import 外链
+  css = css.replace(/@charset\b[^;]*;?/gi, '');         // @charset
+  css = css.replace(/@namespace\b[^;]*;?/gi, '');       // @namespace
+  css = css.replace(/@font-face\s*\{[^}]*\}/gi, '');    // @font-face 块（字体指纹）
+  css = css.replace(/url\(\s*[^)]*\)/gi, '');           // 所有 url(...) 外链/数据
+  css = css.replace(/expression\s*\(/gi, '');           // IE expression 向量
+  const blocks = css.split('}');
+  const out = [];
+  for (const raw of blocks) {
+    const t = raw.trim();
+    if (!t) continue;
+    const i = t.indexOf('{');
+    if (i < 0) { out.push(t); continue; }               // 游离片段/at-rule 续接
+    const selector = t.slice(0, i).trim();
+    if (selector.startsWith('@')) { out.push(t + '}'); continue; } // @media/@keyframes：已去 url/字体，整体放行
+    const decls = t.slice(i + 1).split(';')
+      .map(s => s.trim()).filter(Boolean)
+      .map((decl) => {
+        const c = decl.indexOf(':');
+        if (c < 0) return null;
+        const prop = decl.slice(0, c).trim().toLowerCase();
+        const value = decl.slice(c + 1).trim();
+        if (!/^-?[a-z][a-z0-9-]*$/.test(prop)) return null;   // 非法属性名
+        if (CSS_DANGEROUS_PROP.test(prop)) return null;       // 危险属性
+        if (/javascript:|vbscript:|data:\s*(?!image\/)/i.test(value)) return null; // 危险值
+        return decl;
+      }).filter(Boolean);
+    if (decls.length && selector) out.push(`${selector}{${decls.join(';')}}`);
+  }
+  return out.join(' ').slice(0, CSS_MAX);
+}
+
 // Report payload validation. Rejects malformed/implausible data.
 const validateReport = (b) => {
   if (typeof b !== 'object' || b === null) return null;
@@ -75,4 +120,4 @@ const validateReport = (b) => {
   };
 };
 
-module.exports = { num, str, validateReport };
+module.exports = { num, str, validateReport, sanitizeCss };

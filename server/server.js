@@ -7,6 +7,7 @@ const api = require('./src/api');
 const komari = require('./src/komari');
 const alerts = require('./src/alerts');
 const { safeEqual, ipWhitelist } = require('./src/auth');
+const { sanitizeCss } = require('./src/validate');
 
 const app = express();
 // 信任前置反代（Nginx）的 X-Forwarded-*，使 req.ip 取到真实客户端 IP，
@@ -59,6 +60,13 @@ const METRIC_DEFS = [
   { name: 'monitor_agent_last_seen_seconds', desc: '最近一次上报的 Unix 时间戳（秒）', get: m => m ? Math.floor((m.ts || 0) / 1000) : null },
 ];
 app.get('/metrics', (req, res) => {
+  // M-2：默认强制 HTTPS，避免 ADMIN_TOKEN 在内网明文抓取时被嗅探。
+  // 本地直连 http 调试可设 ADMIN_ALLOW_HTTP=1（与后台管理端同款开关）。
+  const proto = String(req.header('X-Forwarded-Proto') || '').toLowerCase().split(',')[0].trim();
+  const isHttps = proto === 'https' || req.secure;
+  if (!isHttps && process.env.ADMIN_ALLOW_HTTP !== '1') {
+    return res.status(403).set('Content-Type', 'text/plain').send('403 HTTPS required');
+  }
   const auth = req.header('Authorization') || '';
   const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!t || !safeEqual(t, process.env.ADMIN_TOKEN)) {
@@ -136,6 +144,15 @@ app.get('/', (req, res, next) => {
 });
 // admin.html 受 IP 白名单保护
 app.get('/admin.html', ipWhitelist, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+// 同源自定义 CSS 端点（M-1 修复）：以 <link> 投放而非内联 <style>，
+// 既让 custom_css 在严格 CSP（style-src 'self'）下真正生效，又避免内联注入。
+// 内容为落库前已清洗的版本；公开可读（仅样式，无敏感数据），并对所有访客生效。
+app.get('/custom.css', (req, res) => {
+  const css = sanitizeCss(db.getUiSettings().custom_css || '');
+  res.setHeader('Content-Type', 'text/css; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  res.send(css);
+});
 // 禁用 JS/CSS/SVG/HTML 的浏览器/CDN 缓存，确保更新后立即生效
 app.use((req, res, next) => {
   if (/\.(js|css|svg|html?)$/i.test(req.path)) {
@@ -174,15 +191,54 @@ const server = app.listen(PORT, () => {
 
 // Komari 兼容 WebSocket：主题通过 ws://host/api/clients 发送 "get" 获取实时快照。
 // 依赖 ws 包；若未安装则降级（REST 兼容接口 /api/public、/api/nodes、/api/recent 仍可用）。
+// M-5：公开快照端点无鉴权，需限制资源消耗：① 仅当 public_enabled 开启才开放；
+// ② 按客户端 IP 限制并发连接数与新建速率，防资源耗尽型攻击。
+const WS_MAX_CONCURRENT = 5;   // 单 IP 最大并发连接
+const WS_MAX_PER_MIN = 20;     // 单 IP 每分钟最大新建连接数
+const wsConns = new Map();     // ip -> Set(ws)
+const wsHits = new Map();      // ip -> { reset, count }
+setInterval(() => wsHits.clear(), 60000).unref?.();
+function wsClientIp(req) {
+  const xff = String((req.headers && req.headers['x-forwarded-for']) || '').split(',')[0].trim();
+  return xff || (req.socket && req.socket.remoteAddress) || 'unknown';
+}
 try {
   const { WebSocketServer } = require('ws');
   const wss = new WebSocketServer({ server, path: '/api/clients' });
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // 仅公开状态页开启时开放（数据为脱敏的公开视图）
+    if (!db.getUiSettings().public_enabled) {
+      try { ws.close(1008, 'public disabled'); } catch (_) {}
+      return;
+    }
+    const ip = wsClientIp(req);
+    // 新建速率限制
+    const now = Date.now();
+    let rec = wsHits.get(ip);
+    if (!rec || now > rec.reset) rec = { reset: now + 60000, count: 0 };
+    rec.count++;
+    wsHits.set(ip, rec);
+    if (rec.count > WS_MAX_PER_MIN) {
+      try { ws.close(1008, 'rate limited'); } catch (_) {}
+      return;
+    }
+    // 并发限制
+    let set = wsConns.get(ip);
+    if (!set) { set = new Set(); wsConns.set(ip, set); }
+    if (set.size >= WS_MAX_CONCURRENT) {
+      try { ws.close(1008, 'too many connections'); } catch (_) {}
+      return;
+    }
+    set.add(ws);
     const send = () => { try { ws.send(JSON.stringify(komari.snapshot())); } catch (_) {} };
     send();
     ws.on('message', () => send()); // Komari 客户端发送 "get" 触发刷新
     const timer = setInterval(send, 5000);
-    ws.on('close', () => clearInterval(timer));
+    ws.on('close', () => {
+      clearInterval(timer);
+      set.delete(ws);
+      if (set.size === 0) wsConns.delete(ip);
+    });
   });
   console.log('[monitor] Komari-compat WebSocket /api/clients enabled');
 } catch (e) {

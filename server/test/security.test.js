@@ -8,7 +8,7 @@ const assert = require('node:assert');
 
 const { totp, verifyTOTP, generateSecret } = require('../src/totp');
 const auth = require('../src/auth');
-const { validateReport, num, str } = require('../src/validate');
+const { validateReport, num, str, sanitizeCss } = require('../src/validate');
 
 // ============================================================
 // TOTP (RFC 6238 标准测试向量)
@@ -183,4 +183,63 @@ test('num/str 边界', () => {
   assert.strictEqual(str('hi', 5), 'hi');
   assert.strictEqual(str('a'.repeat(10), 5), ''); // 超长 → 空串
   assert.strictEqual(str(123, 5), '');
+});
+
+// ============================================================
+// sanitizeCss (M-1): 自定义 CSS 注入防护
+// ============================================================
+
+test('sanitizeCss: 合法样式原样保留', () => {
+  const css = 'body{background:#0b0f17} .card{border-radius:16px;box-shadow:none}';
+  assert.strictEqual(sanitizeCss(css), css);
+});
+
+test('sanitizeCss: 剥离 @import 外链', () => {
+  const css = '@import url("https://evil.example/x.css"); body{color:red}';
+  const out = sanitizeCss(css);
+  assert.ok(!out.includes('@import'));
+  assert.ok(out.includes('color:red'));
+});
+
+test('sanitizeCss: 剥离 @font-face（字体指纹）', () => {
+  const css = '@font-face{font-family:evil;src:url(https://evil/x.woff2)} body{color:red}';
+  const out = sanitizeCss(css);
+  assert.ok(!out.includes('@font-face'));
+  assert.ok(!out.includes('evil'));
+});
+
+test('sanitizeCss: 移除所有 url() 外链/数据', () => {
+  const css = 'div{background:url(https://evil/x.png)} a{color:red}';
+  const out = sanitizeCss(css);
+  assert.ok(!out.toLowerCase().includes('url('));
+  assert.ok(out.includes('color:red'));
+});
+
+test('sanitizeCss: 拒绝 expression() / javascript: 等向量', () => {
+  const css = 'x{width:expression(alert(1))} y{background:url(javascript:alert(1))}';
+  const out = sanitizeCss(css);
+  assert.ok(!out.toLowerCase().includes('expression'));
+  assert.ok(!out.toLowerCase().includes('javascript:'));
+});
+
+test('sanitizeCss: 拒绝危险属性 behavior / -moz-binding', () => {
+  const css = 'a{behavior:url(x)} b{-moz-binding:url(y)} c{color:red}';
+  const out = sanitizeCss(css);
+  assert.ok(!out.toLowerCase().includes('behavior'));
+  assert.ok(!out.toLowerCase().includes('binding'));
+  assert.ok(out.includes('color:red'));
+});
+
+test('sanitizeCss: @media 等 at-rule 整体保留', () => {
+  const css = '@media (max-width:600px){.card{padding:4px}}';
+  const out = sanitizeCss(css);
+  assert.ok(out.includes('@media'));
+  assert.ok(out.includes('padding:4px'));
+});
+
+test('sanitizeCss: 非字符串 / 超长输入安全降级', () => {
+  assert.strictEqual(sanitizeCss(null), '');
+  assert.strictEqual(sanitizeCss(123), '');
+  const big = 'a{color:red}'.repeat(10000);
+  assert.ok(sanitizeCss(big).length <= 20000);
 });
