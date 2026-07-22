@@ -80,12 +80,12 @@ This project earned a **⭐⭐⭐⭐⭐ (5/5)** rating in two independent securi
 3. **Authentication** — each agent has an `AGENT_ID` + `AGENT_TOKEN` (generated server-side, stored as sha256 in the DB); reports require `X-Agent-ID` + `Bearer`; unknown / mismatched are rejected.
 4. **Transport encryption** — HTTPS throughout.
 5. **Input validation** — `/api/report` strictly validates value ranges and types; out-of-range / malformed input is rejected with 400.
-6. **Rate limiting** — Nginx rate-limits the report endpoint.
+6. **Rate limiting** — Nginx rate-limits the report endpoint (based on the real TCP peer, the true security boundary). The server also has an application-layer fallback limiter (20 req/IP/10s, plus per-endpoint limits on register/setup), but its `req.ip` comes from the reverse proxy's `X-Forwarded-For`, which **an attacker can spoof** — so the app-layer limiter is **not** a security boundary, only a fallback. In production rely on Nginx `limit_req` and never expose port 8080 to the public internet.
 7. **Minimal attack surface** — local SQLite file; all dashboard / write endpoints require the admin token.
 8. **Weak-token startup guard** — at startup, if `ADMIN_TOKEN` is empty, equals the default `change-me-admin-token`, or is shorter than 16 chars, the server refuses to start (`process.exit(1)`), forcing the admin to set a strong token early.
 9. **HTTPS enforcement on admin APIs** — `adminAuth` checks `X-Forwarded-Proto`; any request proxied over a non-HTTPS origin is rejected with `403`, preventing plaintext transmission of the admin token. Note: this is fully effective only when the server port is NOT published to the public internet and only Nginx is exposed.
 10. **Build-context isolation** — `server/.dockerignore` excludes `data/`, `.env`, `node_modules`, etc., so the SQLite database and credentials are never baked into the image.
-11. **Dashboard two-factor authentication (TOTP)** — can be enabled in the "Security" panel. Once enabled, all **admin write operations** (create/edit/delete clients, reset token, test alert) additionally require a TOTP code on top of the static token, so the static admin token alone cannot perform dangerous actions. Dashboard login is maintained by a signed `HttpOnly + Secure + SameSite=Strict` cookie, so the admin token is **no longer stored in plaintext on the front end** (eliminating the XSS-theft risk). Read-only pulls (Grafana, `/metrics`, `READONLY_TOKEN`) stay transparent and are not subject to 2FA. See "Two-factor authentication (TOTP)" below.
+11. **Dashboard two-factor authentication (TOTP)** — can be enabled in the "Security" panel. Once enabled, all **admin write operations** (create/edit/delete clients, reset token, test alert) additionally require a TOTP code on top of the static token, so the static admin token alone cannot perform dangerous actions. Dashboard login is maintained by a signed `HttpOnly + Secure + SameSite=Strict` cookie, so the admin token is **no longer stored in plaintext on the front end** (eliminating the XSS-theft risk). Read-only pulls (Grafana, `/metrics`, authenticated with `ADMIN_TOKEN` via Bearer, and HTTPS-enforced except when `ADMIN_ALLOW_HTTP=1`) stay transparent and are not subject to 2FA. See "Two-factor authentication (TOTP)" below.
 12. **Agent report-channel hardening** — both agents (Linux / Windows) enforce HTTPS client-side: a non-localhost `http://` `SERVER_URL` fails at startup, preventing the token from ever being sent in cleartext (defense in depth beyond the server's `X-Forwarded-Proto` whitelist). On `401/403` they enter a **10-minute long backoff with no immediate retry** (the static token cannot self-heal, avoiding log flooding and brute-force against the server); transient errors (5xx, network blips) still use the exponential backoff retry.
 
 ### Two-factor authentication (TOTP)
@@ -100,7 +100,7 @@ After enabling:
 
 - Dashboard login requires **admin token + TOTP code**; the session is kept via a signed cookie (HttpOnly, never stored in plaintext on the front end).
 - All admin write operations require the TOTP code in addition to the token; the static token alone is rejected.
-- Read-only monitoring (Grafana, `/metrics`, read-only token) is unaffected and stays transparent.
+- Read-only monitoring (Grafana, `/metrics`, authenticated with `ADMIN_TOKEN` via Bearer) is unaffected and stays transparent.
 
 **Lost-device recovery**: if you lose your TOTP device, clear the 2FA config in SQLite and re-bind:
 

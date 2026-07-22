@@ -209,10 +209,14 @@ const clearAlertState = (agent_id, type) => stmts.clearAlertState.run(agent_id, 
 // ---- Admin 2FA (TOTP) 配置（单管理员模型，key-value）----
 const _getCfg = db.prepare('SELECT value FROM admin_config WHERE key = ?');
 const _setCfg = db.prepare('INSERT OR REPLACE INTO admin_config (key, value) VALUES (?, ?)');
+const _setCfgIfAbsent = db.prepare('INSERT OR IGNORE INTO admin_config (key, value) VALUES (?, ?)');
 const TWOFA_SECRET = 'admin_2fa_secret';
 const TWOFA_ENABLED = 'admin_2fa_enabled';
 const getConfig = (k) => { const r = _getCfg.get(k); return r ? r.value : null; };
 const setConfig = (k, v) => _setCfg.run(k, String(v));
+// 仅当 key 不存在时写入（依赖 key 主键唯一性）。返回 true 表示本次写入成功。
+// 用于 /api/setup/generate 防并发竞态：多个请求同时到达时只有一个能落库，其余返回 false。
+const setConfigIfAbsent = (k, v) => _setCfgIfAbsent.run(k, String(v)).changes > 0;
 const get2FASecret = () => getConfig(TWOFA_SECRET);
 const is2FAEnabled = () => getConfig(TWOFA_ENABLED) === '1';
 const set2FASecret = (s) => setConfig(TWOFA_SECRET, s);
@@ -265,6 +269,6 @@ module.exports = {
   createAgent, getAgent, getAgents, updateAgent, deleteAgent, resetAgentToken,
   touchAgent, insertMetric, getLatestMetric, getMetrics, getMetricsAll,
   prune, getAlertState, setAlertState, clearAlertState,
-  getConfig, setConfig, get2FASecret, is2FAEnabled, set2FASecret, set2FAEnabled,
+  getConfig, setConfig, setConfigIfAbsent, get2FASecret, is2FAEnabled, set2FASecret, set2FAEnabled,
   getUiSettings, setUiSettings, getNotifyConfig, setNotifyConfig
 };

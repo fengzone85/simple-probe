@@ -57,6 +57,5 @@ function flagImg(code, size) {
   code = (code || '').toUpperCase();
   if (!code || code.length !== 2) return '';
   const lo = code.toLowerCase();
-  return `<img class="flag-img" loading="lazy" alt="${code}" title="${code}" src="/flags/${lo}.svg"` +
-    ` onerror="this.outerHTML='<span class=&quot;flag-code&quot;>${code}</span>'">`;
+  return `<img class="flag-img" loading="lazy" alt="${code}" title="${code}" src="/flags/${lo}.svg">`;
 }

@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 const db = require('./db');
-const { agentAuth, adminOrReadonly, adminOnly, requireAdmin, safeEqual, setSessionCookie, clearSessionCookie, SESSION_TTL } = require('./auth');
+const { agentAuth, adminOrReadonly, adminOnly, requireAdmin, safeEqual, setSessionCookie, clearSessionCookie, SESSION_TTL, requireProto } = require('./auth');
 const totp = require('./totp');
 const alerts = require('./alerts');
 
@@ -59,10 +59,26 @@ function getAdminToken() {
 router.get('/setup/status', (req, res) => {
   res.json({ needs_setup: !getAdminToken() });
 });
-router.post('/setup/generate', (req, res) => {
-  if (getAdminToken()) return res.status(400).json({ error: 'already initialized' });
+// 初始化端点限流（纵深防御）：每 IP 每 60s 最多 5 次，防止未授权时暴力/竞态抢占。
+const SETUP_WINDOW = 60000, SETUP_MAX = 5;
+const setupHits = new Map();
+setInterval(() => setupHits.clear(), SETUP_WINDOW).unref?.();
+const setupRateLimit = (req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  const now = Date.now();
+  let rec = setupHits.get(ip);
+  if (!rec || now > rec.reset) rec = { reset: now + SETUP_WINDOW, count: 0 };
+  rec.count++;
+  setupHits.set(ip, rec);
+  if (rec.count > SETUP_MAX) return res.status(429).json({ error: 'too many requests' });
+  next();
+};
+router.post('/setup/generate', setupRateLimit, (req, res) => {
+  // 原子写入：仅当未初始化时落库，并发请求中只有一个成功，其余返回 400，杜绝 Token 抢注竞态。
   const token = 'adm_' + crypto.randomBytes(16).toString('hex');
-  db.setConfig('admin_token_raw', token);
+  if (!db.setConfigIfAbsent('admin_token_raw', token)) {
+    return res.status(400).json({ error: 'already initialized' });
+  }
   console.log('[setup] 管理员 Token 已生成并保存到 DB');
   res.json({ token });
 });
@@ -489,6 +505,7 @@ router.post('/test-alert', adminOnly, async (req, res) => {
 // ---- Admin 登录（签发签名 Session Cookie；若启用 2FA 需 TOTP）----
 // 登录后前端不再持有明文 Admin Token，凭证以 HttpOnly+Secure Cookie 维持，降低 XSS 窃取风险。
 router.post('/login', async (req, res) => {
+  if (!requireProto(req, res)) return; // F2：与管理端点一致，强制经 HTTPS 反代，杜绝明文 Token
   const { token, totp: code } = req.body || {};
   if (!token || !safeEqual(token, getAdminToken())) {
     return res.status(401).json({ error: 'invalid token' });

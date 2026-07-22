@@ -444,7 +444,7 @@ function cardHtml(a, hist) {
   const probes = parseProbes(m.probes);
   const diskPct = m.disk_pct != null ? m.disk_pct : 0;
   const diskCls = pctClass(diskPct);
-  return `<div class="card" data-id="${a.id}">
+  return `<div class="card" data-id="${esc(a.id)}">
     <div class="top">
       <span class="status ${statusCls}"></span>
       <h3>${esc(a.name)}</h3>${merchant}${expireBadge}${countryBadge}

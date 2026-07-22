@@ -185,7 +185,7 @@ function ipToInt(ip) {
 }
 
 module.exports = {
-  agentAuth, adminAuth, adminOrReadonly, adminOnly, requireAdmin, ipWhitelist,
+  agentAuth, adminAuth, adminOrReadonly, adminOnly, requireAdmin, ipWhitelist, requireProto,
   safeEqual, signSession, verifySession, getSession,
   setSessionCookie, clearSessionCookie, COOKIE_NAME, SESSION_TTL,
   verifyTotpHeader,
