@@ -3,21 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simple Probe · Host Monitor</title>
+  <title>谛听轻量探针 · Host Monitor</title>
   <link rel="stylesheet" href="style.css?v=12" />
   <link id="customCssLink" rel="stylesheet" href="/custom.css" />
   <script src="vendor/echarts.min.js"></script>
+  <script src="i18n/i18n.js"></script>
 </head>
 <body>
   <!-- 独立登录页 -->
   <div id="loginPage" class="login-page">
     <div class="login-card">
       <div class="login-logo">🛰️</div>
-      <h1 id="loginTitle">Simple Probe</h1>
-      <p class="login-sub" id="loginSub">请输入管理员 Token 登录</p>
-      <div class="field"><input id="loginToken" type="password" placeholder="管理员 Token" autocomplete="off" /></div>
-      <div class="field" id="loginTotpField" style="display:none"><input id="loginTotp" inputmode="numeric" placeholder="动态码 (TOTP)" autocomplete="off" /></div>
-      <button class="btn block" id="btnLoginSubmit">登录</button>
+      <h1 id="loginTitle">谛听轻量探针</h1>
+      <p class="login-sub" id="loginSub" data-i18n="login.subtitle">请输入管理员 Token 登录</p>
+      <div class="field"><input id="loginToken" type="password" data-i18n-ph="login.token_placeholder" placeholder="管理员 Token" autocomplete="off" /></div>
+      <div class="field" id="loginTotpField" style="display:none"><input id="loginTotp" inputmode="numeric" data-i18n-ph="login.totp_placeholder" placeholder="动态码 (TOTP)" autocomplete="off" /></div>
+      <button class="btn block" id="btnLoginSubmit" data-i18n="login.submit">登录</button>
       <div class="login-err" id="loginErr"></div>
     </div>
   </div>
@@ -25,18 +26,18 @@
   <div id="app" hidden>
     <!-- 左侧栏导航（对标 Komari） -->
     <aside class="sidebar">
-      <div class="side-brand"><span class="sb-logo">🛰️</span><span class="sb-name" id="siteTitleSide">Simple Probe</span></div>
+      <div class="side-brand"><span class="sb-logo">🛰️</span><span class="sb-name" id="siteTitleSide">谛听轻量探针</span></div>
       <nav class="side-nav">
-        <button class="nav-item active" data-view="dashboard">📊 <span>仪表盘</span></button>
-        <button class="nav-item" data-view="clients">🖥️ <span>客户端</span></button>
-        <button class="nav-item" data-view="set-basic">🌐 <span>站点信息</span></button>
-        <button class="nav-item" data-view="set-theme">🎨 <span>主题外观</span></button>
-        <button class="nav-item" data-view="set-notify">🔔 <span>通知渠道</span></button>
-        <button class="nav-item" data-view="set-alert">🚨 <span>告警规则</span></button>
-        <button class="nav-item" data-view="set-security">🔐 <span>账户安全</span></button>
-        <button class="nav-item" data-view="set-public">🌍 <span>公开与首页</span></button>
-        <button class="nav-item" data-view="set-skin">🧩 <span>皮肤模板</span></button>
-        <button class="nav-item" id="navSecurity">🔒 <span>安全</span></button>
+        <button class="nav-item active" data-view="dashboard">📊 <span data-i18n="nav.dashboard">仪表盘</span></button>
+        <button class="nav-item" data-view="clients">🖥️ <span data-i18n="nav.clients">客户端</span></button>
+        <button class="nav-item" data-view="set-basic">🌐 <span data-i18n="nav.site_info">站点信息</span></button>
+        <button class="nav-item" data-view="set-theme">🎨 <span data-i18n="nav.theme">主题外观</span></button>
+        <button class="nav-item" data-view="set-notify">🔔 <span data-i18n="nav.notify">通知渠道</span></button>
+        <button class="nav-item" data-view="set-alert">🚨 <span data-i18n="nav.alert">告警规则</span></button>
+        <button class="nav-item" data-view="set-security">🔐 <span data-i18n="nav.security">账户安全</span></button>
+        <button class="nav-item" data-view="set-public">🌍 <span data-i18n="nav.public">公开与首页</span></button>
+        <button class="nav-item" data-view="set-skin">🧩 <span data-i18n="nav.skin">皮肤模板</span></button>
+        <button class="nav-item" id="navSecurity">🔒 <span data-i18n="nav.security_short">安全</span></button>
       </nav>
       <div class="side-foot">
         <button class="btn block" id="btnNew">+ 新建客户端</button>
@@ -47,7 +48,7 @@
     <div class="main">
       <header class="topbar">
         <div class="tb-left">
-          <h1 id="siteTitle">🛰️ Simple Probe<span class="dot">.</span></h1>
+          <h1 id="siteTitle">🛰️ 谛听轻量探针<span class="dot">.</span></h1>
         </div>
         <div class="spacer"></div>
         <a class="icon-btn" id="btnHome" href="/" title="查看公开状态页（首页）">🏠</a>
@@ -65,14 +66,14 @@
           <section class="overview" id="overview"></section>
           <section class="ov-extra" id="ovExtra"></section>
           <div class="toolbar">
-            <span class="toolbar-label">排序</span>
+            <span class="toolbar-label" data-i18n="dashboard.sort_label">排序</span>
             <select id="sortSelect">
-              <option value="created">默认（创建时间）</option>
-              <option value="name">名称</option>
-              <option value="status">状态（在线优先）</option>
-              <option value="cpu">CPU 降序</option>
-              <option value="mem">内存降序</option>
-              <option value="group">分组</option>
+              <option value="created" data-i18n="dashboard.sort_created">默认（创建时间）</option>
+              <option value="name" data-i18n="dashboard.sort_name">名称</option>
+              <option value="status" data-i18n="dashboard.sort_status">状态（在线优先）</option>
+              <option value="cpu" data-i18n="dashboard.sort_cpu">CPU 降序</option>
+              <option value="mem" data-i18n="dashboard.sort_mem">内存降序</option>
+              <option value="group" data-i18n="dashboard.sort_group">分组</option>
             </select>
           </div>
           <section class="grid" id="grid"></section>
@@ -81,7 +82,7 @@
         <!-- 客户端列表视图 -->
         <section class="view view-clients" id="viewClients" hidden>
           <div class="clients-head">
-            <h2>客户端列表</h2>
+            <h2 data-i18n="clients.title">客户端列表</h2>
             <span class="ch-count" id="clientsCount"></span>
           </div>
           <div class="clients-table" id="clientsTable"></div>
@@ -192,6 +193,16 @@
                 <input id="s_allow_ips" placeholder="如 1.2.3.4,10.0.0.0/24" />
               </div>
               <p class="hint">保存后实时生效：不在白名单的 IP 访问后台页面或 API 将返回 403。</p>
+              <h4 style="margin-top:18px" data-i18n="settings.security.language">界面语言</h4>
+              <div class="field">
+                <label data-i18n="settings.security.language">界面语言</label>
+                <select id="s_language">
+                  <option value="auto" data-i18n="settings.security.language_auto">跟随浏览器</option>
+                  <option value="zh-CN">简体中文</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+              <p class="hint">选择后台管理界面的显示语言。保存后刷新页面生效。</p>
             </div>
 
             <div class="tab-pane" data-spane="public" style="display:none">

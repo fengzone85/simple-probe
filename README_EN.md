@@ -1,4 +1,4 @@
-# Simple Probe · Self-hosted Docker Monitor (Nezha alternative)
+# DiTing · Self-hosted Docker Monitor (Nezha alternative)
 
 > Repository: https://github.com/fengzone85/simple-probe
 
@@ -168,7 +168,7 @@ In the worst case (server + one agent both compromised), the attacker's ceiling 
 
 Many monitors (e.g. Nezha) prioritize features with an architecture of **monitored hosts exposed to the public internet + bidirectional communication (WebSocket) + remote execution**. More capable, but the trust boundary is broken: once the server is compromised, every monitored host becomes a remotely controllable node.
 
-| Dimension | Simple Probe (this project) | Command-channel monitors (e.g. Nezha) |
+| Dimension | DiTing (this project) | Command-channel monitors (e.g. Nezha) |
 | --- | --- | --- |
 | Agent inbound | Zero inbound (outbound HTTPS only) | Usually exposes ports / dashboard to the internet |
 | Communication | One-way (Agent→Server POST) | Bidirectional (WebSocket, server can push) |
@@ -178,7 +178,7 @@ Many monitors (e.g. Nezha) prioritize features with an architecture of **monitor
 | Worst case (server + 1 agent breached) | Only report spoofing; no machine controlled | Can push tasks to probe / execute via agents |
 | Trust model | Server and agents both untrusted | Implicitly assumes "server is trusted" |
 
-> Bottom line: Simple Probe trades a functional "subtraction" (no command channel, no fingerprinting, no agent awareness) for a security "addition". An attacker cannot exploit what does not exist.
+> Bottom line: DiTing trades a functional "subtraction" (no command channel, no fingerprinting, no agent awareness) for a security "addition". An attacker cannot exploit what does not exist.
 
 ## Clarification on other agent-type probes (source-level evidence)
 

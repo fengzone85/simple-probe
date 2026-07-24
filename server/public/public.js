@@ -102,7 +102,7 @@ async function initPublic() {
   const enabled = !!(meta && meta.public_enabled);
   publicServerOrder = (meta && Array.isArray(meta.agent_order)) ? meta.agent_order : [];
   try { const lo = JSON.parse(localStorage.getItem('pv_order') || '[]'); if (Array.isArray(lo)) localOrder = lo; } catch (e) {}
-  const title = (meta && meta.site_title) || 'Simple Probe';
+  const title = (meta && meta.site_title) || '谛听轻量探针';
   if ($('pvTitle')) $('pvTitle').textContent = title;
   // 「进入后台」链接统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
   const $pa = $('pvAdmin');
@@ -110,9 +110,9 @@ async function initPublic() {
     const su = (meta && meta.site_url || '').trim();
     $pa.href = su ? (su.replace(/\/+$/, '') + '/admin.html') : '/admin.html';
   }
-  document.title = title + ' · 状态页';
+  document.title = title + ' ' + I18N.t('public.page_title_suffix');
   if ($('pvFooter')) {
-    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener">Simple Probe</a><span id="fvVer" style="margin-left:6px;color:var(--muted);font-size:11px"></span>';
+    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener">DiTing</a><span id="fvVer" style="margin-left:6px;color:var(--muted);font-size:11px"></span>';
   }
   // 异步加载版本信息
   fetch('/api/version').then(r => r.json()).then(function (v) {
@@ -123,7 +123,7 @@ async function initPublic() {
   }).catch(function () {});
   if (!enabled) {
     if ($('pvOverview')) $('pvOverview').innerHTML = '';
-    if ($('pvGrid')) $('pvGrid').innerHTML = '<div class="empty">本站暂未开放公开状态页</div>';
+    if ($('pvGrid')) $('pvGrid').innerHTML = '<div class="empty">' + I18N.t('public.not_enabled') + '</div>';
     if ($('pvList')) $('pvList').innerHTML = '';
     return;
   }
@@ -232,7 +232,7 @@ function pubCardHtml(a) {
     let expireBadge = '';
     if (d != null) {
       const cls = d < 0 ? 'expire' : (d <= 7 ? 'expire-soon' : '');
-      const txt = d < 0 ? `已过期 ${-d}天` : `剩 ${d} 天`;
+      const txt = d < 0 ? I18N.t('public.card_expired', { days: -d }) : I18N.t('public.card_days_left', { days: d });
       expireBadge = `<span class="badge ${cls}">${txt}</span>`;
     }
     const merchant = a.merchant ? `<span class="badge">${esc(a.merchant)}</span>` : '';
@@ -242,12 +242,12 @@ function pubCardHtml(a) {
     const diskCls = pctClass(diskPct);
     return `<div class="card pub-card tpl-visual" data-id="${esc(a.id)}" draggable="true">
       <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${merchant}${expireBadge}${countryBadge}</div>
-      <div class="meta">${esc(a.online ? (a.hostname || '') : '离线')}${a.online && a.os ? (() => { const o = osIcon(a.os); return ' · ' + (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })() : ''}</div>
+      <div class="meta">${esc(a.online ? (a.hostname || '') : I18N.t('public.card_offline'))}${a.online && a.os ? (() => { const o = osIcon(a.os); return ' · ' + (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })() : ''}</div>
       ${a.note ? `<div class="note">📝 ${esc(a.note)}</div>` : ''}
       <div class="metrics">
         <div class="metric"><div class="m-spark">${pubSparkline(cpuArr, '#5cb6a5')}</div><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(memArr, '#6c9eff')}</div><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
-        <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? '进程' : '负载'}</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
+        <div class="metric"><div class="m-spark">${pubSparkline(loadArr, '#ffce5c')}</div><div class="m-info"><span class="m-lbl">${a.os && a.os.toLowerCase().includes('windows') ? I18N.t('public.card_processes') : I18N.t('public.card_load')}</span><span class="m-val">${a.load1 != null ? Number(a.load1).toFixed(2) : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(tempArr, '#ff7a59')}</div><div class="m-info"><span class="m-lbl">温度</span><span class="m-val">${a.temp != null ? Number(a.temp).toFixed(1) + '°C' : '—'}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline(swapArr, '#a06bff')}</div><div class="m-info"><span class="m-lbl">Swap</span><span class="m-val">${fmtPct(a.swap_pct)}</span></div></div>
         <div class="metric"><div class="m-spark">${pubSparkline2(diskRArr, diskWArr, '#4ea5d9', '#ff9f59')}</div><div class="m-info"><span class="m-lbl">io</span><span class="m-val">${((a.disk_r_rate || 0) / 1048576).toFixed(2)}/${((a.disk_w_rate || 0) / 1048576).toFixed(2)}</span></div></div>
@@ -268,7 +268,7 @@ function pubCardHtml(a) {
   // 简约版：仅基础信息，无任何悬停效果
   return `<div class="card pub-card tpl-simple" data-id="${esc(a.id)}" draggable="true">
     <div class="top"><span class="status ${statusCls}"></span><h3>${esc(a.name)}</h3>${flag}</div>
-    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '') + (a.os ? (' · ' + (() => { const o = osIcon(a.os); return (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })()) : '')) : ' · 离线'}</div>
+    <div class="meta">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '') + (a.os ? (' · ' + (() => { const o = osIcon(a.os); return (o ? `<img class="os-icon" src="/${o.file}" title="${esc(o.alt)}" /> ` : '') + esc(a.os); })()) : '')) : ' · ' + I18N.t('public.card_offline')}</div>
     <div class="metrics">
       <div class="metric"><div class="m-info"><span class="m-lbl">CPU</span><span class="m-val ${pctClass(cpu)}">${fmtPct(cpu)}</span></div></div>
       <div class="metric"><div class="m-info"><span class="m-lbl">内存</span><span class="m-val ${pctClass(mem)}">${fmtPct(mem)}</span></div></div>
@@ -278,12 +278,12 @@ function pubCardHtml(a) {
   </div>`;
 }
 function pubListHtml(list) {
-  if (!list || !list.length) return '<div class="empty">暂无客户端数据</div>';
+  if (!list || !list.length) return '<div class="empty">' + I18N.t('public.no_data') + '</div>';
   const body = list.map(a => {
     const flag = a.country && flagImg(a.country) ? `<span class="flag" title="${esc(countryName(a.country))}">${flagImg(a.country)}</span>` : '';
     const statusCls = a.online ? 'on' : 'offline';
     return `<tr data-id="${a.id}">
-      <td><div class="ct-name"><span class="status ${statusCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · 离线'}</div></td>
+      <td><div class="ct-name"><span class="status ${statusCls}"></span>${esc(a.name)}</div><div class="ct-sub">${esc(a.group || '')}${a.online ? (' · ' + esc(a.hostname || '')) : ' · ' + I18N.t('public.card_offline')}</div></td>
       <td>${flag || '<span class="ct-sub">—</span>'}</td>
       <td class="ct-num ${a.online && a.cpu >= 90 ? 'danger' : (a.online && a.cpu >= 75 ? 'warn' : '')}">${fmtPct(a.cpu)}</td>
       <td class="ct-num ${a.online && a.mem_pct >= 90 ? 'danger' : (a.online && a.mem_pct >= 75 ? 'warn' : '')}">${fmtPct(a.mem_pct)}</td>
@@ -293,7 +293,7 @@ function pubListHtml(list) {
       <td class="ct-num">↓${fmtRate(a.net_rx_rate)} ↑${fmtRate(a.net_tx_rate)}</td>
     </tr>`;
   }).join('');
-  return `<table class="ctable"><thead><tr><th>名称</th><th>国家</th><th>CPU</th><th>内存</th><th>硬盘</th><th>在线时长</th><th>系统</th><th>实时网速</th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="ctable"><thead><tr><th>${I18N.t('public.list_name')}</th><th>${I18N.t('public.list_country')}</th><th>${I18N.t('public.list_cpu')}</th><th>${I18N.t('public.list_mem')}</th><th>${I18N.t('public.list_disk')}</th><th>${I18N.t('public.list_uptime')}</th><th>${I18N.t('public.list_os')}</th><th>${I18N.t('public.list_net_rate')}</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 // ---------- 列表行点击下方展开详情（Komari 风格）----------
 function showPublicDetail(id, tr) {
@@ -345,7 +345,7 @@ function showPublicDetail(id, tr) {
 function renderPublic() {
   const ov = publicOverview;
   if ($('pvOverview')) {
-    if (ov) { const tr = publicAgents.reduce((s,a)=>s+(a.net_rx_rate||0)+(a.net_tx_rate||0),0); $('pvOverview').innerHTML = pvStat('客户端总数', ov.total) + pvStat('在线', ov.online, 'green') + pvStat('离线', ov.offline, 'red') + pvStat('即时网速', `↓↑ ${fmtRate(tr)}`); }
+    if (ov) { const tr = publicAgents.reduce((s,a)=>s+(a.net_rx_rate||0)+(a.net_tx_rate||0),0); $('pvOverview').innerHTML = pvStat(I18N.t('public.stat_total'), ov.total) + pvStat(I18N.t('public.stat_online'), ov.online, 'green') + pvStat(I18N.t('public.stat_offline'), ov.offline, 'red') + pvStat(I18N.t('public.stat_realtime_net'), `↓↑ ${fmtRate(tr)}`); }
     else $('pvOverview').innerHTML = '';
   }
   const grid = $('pvGrid'), list = $('pvList');

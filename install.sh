@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Simple Probe — 一键部署脚本
+# 谛听轻量探针 — 一键部署脚本
 #   借鉴 Nezha / Komari / Pulse 的「单文件下载 + 交互菜单 + 统一管理」范式
 # =============================================================================
 # 一条命令下载并运行（建议先下载审阅，再 sudo 执行）：
@@ -24,6 +24,23 @@
 
 set -euo pipefail
 
+# ── 国际化（i18n）──────────────────────────────────────────────────────────────
+# 根据 LANG / LC_ALL 环境变量自动选择语言，默认中文
+_I18N_LANG="${LANG:-zh_CN}"
+case "$_I18N_LANG" in
+    en*|EN*) I18N_LANG="en" ;;
+    *)       I18N_LANG="zh" ;;
+esac
+# 消息函数：msg "key" → 输出对应语言的文本
+msg() {
+    local key="$1"
+    if [[ "$I18N_LANG" == "en" ]]; then
+        echo "${I18N_EN[$key]:-$key}"
+    else
+        echo "${I18N_ZH[$key]:-$key}"
+    fi
+}
+
 # ── 脚本版本（语义化）──────────────────────────────────────────────────────────
 # 每次修改本脚本行为，请同步 +1 版本号、更新日期与「本版要点」，方便用户对比是否
 # 需要更新，并在更新后直观了解改动内容。远端菜单会据此提示「发现新版」。
@@ -43,7 +60,7 @@ A_SERVER=""; A_ID=""; A_TOKEN=""; A_TOKEN_FILE=""; A_SETUP=""; A_SETUP_NAME=""; 
 
 show_usage() {
     cat <<EOF
-Simple Probe 一键部署脚本
+谛听轻量探针 一键部署脚本
 
 用法（交互）：
   sudo bash install.sh                 # 显示菜单，逐项选择
@@ -532,29 +549,27 @@ update_agent() {
 
 # ── 状态 / 卸载 ────────────────────────────────────────────────────────────────
 status_all() {
-    echo "== 服务端 (Docker) =="
+    echo “$(msg “status.server_header”)”
     local running=0 installed=0
-    # 用 cd 进 compose 目录的方式检测运行态（不依赖 -C flag，兼容 compose v5 等版本；
-    # 之前用 docker compose -C 在本机 compose v5.3.1 上报 “unknown shorthand flag: 'C'” 而误报）
-    if ( cd "$SRC_DIR/server" && docker compose ps --filter status=running -q 2>/dev/null ) | grep -q .; then
+    if ( cd “$SRC_DIR/server” && docker compose ps --filter status=running -q 2>/dev/null ) | grep -q .; then
         running=1
-        ( cd "$SRC_DIR/server" && docker compose ps --format '  {{.Name}}  {{.Status}}' )
+        ( cd “$SRC_DIR/server” && docker compose ps --format '  {{.Name}}  {{.Status}}' )
     fi
-    [[ -d "$SRC_DIR/server" ]] && installed=1
+    [[ -d “$SRC_DIR/server” ]] && installed=1
     if [[ $running -eq 0 && $installed -eq 1 ]]; then
-        echo "  已安装但未运行 → 可选「5) 更新服务端」重建启动，或: cd $SRC_DIR/server && docker compose up -d"
+        echo “$(msg “status.server_not_running”), or: cd $SRC_DIR/server && docker compose up -d”
     elif [[ $running -eq 0 && $installed -eq 0 ]]; then
-        echo "  未安装 → 请先「1) 安装服务端」"
+        echo “$(msg “status.server_not_installed”)”
     fi
-    echo "== 受控端 (systemd) =="
+    echo “$(msg “status.agent_header”)”
     if systemctl list-unit-files simple-probe-agent.service >/dev/null 2>&1; then
         if systemctl is-active --quiet simple-probe-agent; then
-            echo "  active"
+            echo “$(msg “status.agent_active”)”
         else
-            echo "  inactive / 未运行"
+            echo “$(msg “status.agent_inactive”)”
         fi
     else
-        echo "  未安装"
+        echo “$(msg “status.agent_not_installed”)”
     fi
 }
 
@@ -830,20 +845,20 @@ SQL
 # ── 数据库管理子菜单（交互模式）─────────────────────────────────────────────────
 db_manage_menu() {
     echo ""
-    echo -e "${BLUE}━━━ 数据库管理 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}$(msg "db_menu.header")${NC}"
     echo ""
-    echo "  1) 备份数据库"
-    echo "  2) 从备份恢复"
-    echo "  3) 查看备份列表"
-    echo "  4) 查看数据库统计"
-    echo "  0) 返回主菜单"
+    echo "  $(msg "db_menu.backup")"
+    echo "  $(msg "db_menu.restore")"
+    echo "  $(msg "db_menu.list")"
+    echo "  $(msg "db_menu.stats")"
+    echo "  $(msg "db_menu.back")"
     echo ""
-    read -r -p "请选择 [0-4]: " c || exit 0
+    read -r -p "$(msg "db_menu.prompt")" c || exit 0
     case "$c" in
         1) do_backup "" ;;
         2)
-            local bkp; read -r -p "备份文件路径: " bkp || return
-            [[ -n "$bkp" ]] && do_restore "$bkp" || echo "已取消"
+            local bkp; read -r -p "$(msg "db_menu.restore_prompt")" bkp || return
+            [[ -n "$bkp" ]] && do_restore "$bkp" || msg "cancelled"
             ;;
         3) do_backup_list ;;
         4) do_db_stats ;;
@@ -853,11 +868,11 @@ db_manage_menu() {
 
 # 重置管理员 Token：仅通过 SSH 在服务器上运行，生成新 Token 并立即使旧 Token 失效
 do_reset_admin_token() {
-    echo "== 重置管理员 Token =="
+    echo "$(msg "reset.header")"
     echo ""
-    echo -e "${YELLOW}[警告] 此操作将生成新的管理员 Token，旧 Token 立即失效！${NC}"
-    read -r -p "确认重置？输入 yes 继续: " confirm || { echo "已取消"; return 0; }
-    [[ "$confirm" == "yes" ]] || { echo "已取消"; return 0; }
+    echo -e "${YELLOW}$(msg "reset.warn")${NC}"
+    read -r -p "$(msg "reset.confirm_prompt")" confirm || { msg "cancelled"; return 0; }
+    [[ "$confirm" == "yes" ]] || { msg "cancelled"; return 0; }
 
     ensure_deps || return 1
     ensure_docker || return 1
@@ -919,11 +934,11 @@ do_reset_admin_token() {
     fi
 
     echo ""
-    echo -e "${GREEN}[OK]   新管理员 Token 已生成${NC}"
+    echo -e "${GREEN}$(msg "reset.ok")${NC}"
     echo ""
     echo "  $new_token"
     echo ""
-    echo -e "${YELLOW}[重要] 请立即保存！旧 Token 已失效，需用新 Token 登录。${NC}"
+    echo -e "${YELLOW}$(msg "reset.save")${NC}"
 }
 
 uninstall_all() {
@@ -942,32 +957,116 @@ uninstall_all() {
     fi
 }
 
+# ── i18n 语言表（在 show_menu 之前定义，供 msg() 使用）─────────────────────────
+declare -A I18N_ZH=(
+    [menu.header]="━━━ 谛听轻量探针 一键部署  v%s (%s) ━━━━━━━━"
+    [menu.os]="系统:"
+    [menu.arch]="架构:"
+    [menu.notes]="本版要点:"
+    [menu.new_version]="▲ 发现新版 v%s（当前 v%s），建议先选「4) 更新安装脚本」"
+    [menu.up_to_date]="✓ 已是最新脚本 (v%s)"
+    [menu.install_server]="1) 安装服务端 (Docker)"
+    [menu.install_agent]="2) 安装受控端 Agent (systemd)"
+    [menu.update_agent]="3) 更新受控端 (拉取最新 agent 代码)"
+    [menu.update_script]="4) 更新安装脚本 (install.sh 自身)"
+    [menu.update_server]="5) 更新服务端 (拉取最新 + 重建)"
+    [menu.status]="6) 查看状态"
+    [menu.uninstall]="7) 卸载"
+    [menu.db_manage]="8) 数据库管理（备份/恢复/统计）"
+    [menu.exit]="0) 退出"
+    [menu.prompt]="请选择 [0-8]: "
+    [menu.exit_msg]="退出"
+    [db_menu.header]="━━━ 数据库管理 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    [db_menu.backup]="1) 备份数据库"
+    [db_menu.restore]="2) 从备份恢复"
+    [db_menu.list]="3) 查看备份列表"
+    [db_menu.stats]="4) 查看数据库统计"
+    [db_menu.back]="0) 返回主菜单"
+    [db_menu.prompt]="请选择 [0-4]: "
+    [db_menu.restore_prompt]="备份文件路径: "
+    [cancelled]="已取消"
+    [status.server_header]="== 服务端 (Docker) =="
+    [status.server_not_running]="  已安装但未运行 → 可选「5) 更新服务端」重建启动"
+    [status.server_not_installed]="  未安装 → 请先「1) 安装服务端」"
+    [status.agent_header]="== 受控端 (systemd) =="
+    [status.agent_active]="  active"
+    [status.agent_inactive]="  inactive / 未运行"
+    [status.agent_not_installed]="  未安装"
+    [reset.header]="== 重置管理员 Token =="
+    [reset.confirm_prompt]="确认重置？输入 yes 继续: "
+    [reset.cancelled]="已取消"
+    [reset.ok]="[OK]   新管理员 Token 已生成"
+    [reset.save]="[重要] 请立即保存！旧 Token 已失效，需用新 Token 登录。"
+    [reset.warn]="[警告] 此操作将生成新的管理员 Token，旧 Token 立即失效！"
+)
+declare -A I18N_EN=(
+    [menu.header]="━━━ 谛听轻量探针 Deploy  v%s (%s) ━━━━━━━━"
+    [menu.os]="OS:"
+    [menu.arch]="Arch:"
+    [menu.notes]="Notes:"
+    [menu.new_version]="▲ New version v%s available (current v%s), recommend '4) Update script'"
+    [menu.up_to_date]="✓ Script up to date (v%s)"
+    [menu.install_server]="1) Install Server (Docker)"
+    [menu.install_agent]="2) Install Agent (systemd)"
+    [menu.update_agent]="3) Update Agent (fetch latest)"
+    [menu.update_script]="4) Update install.sh (self)"
+    [menu.update_server]="5) Update Server (fetch + rebuild)"
+    [menu.status]="6) Status"
+    [menu.uninstall]="7) Uninstall"
+    [menu.db_manage]="8) Database (backup/restore/stats)"
+    [menu.exit]="0) Exit"
+    [menu.prompt]="Select [0-8]: "
+    [menu.exit_msg]="Exit"
+    [db_menu.header]="━━━ Database ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    [db_menu.backup]="1) Backup Database"
+    [db_menu.restore]="2) Restore from Backup"
+    [db_menu.list]="3) List Backups"
+    [db_menu.stats]="4) Database Stats"
+    [db_menu.back]="0) Back to Main Menu"
+    [db_menu.prompt]="Select [0-4]: "
+    [db_menu.restore_prompt]="Backup file path: "
+    [cancelled]="Cancelled"
+    [status.server_header]="== Server (Docker) =="
+    [status.server_not_running]="  Installed but not running → try '5) Update Server'"
+    [status.server_not_installed]="  Not installed → run '1) Install Server' first"
+    [status.agent_header]="== Agent (systemd) =="
+    [status.agent_active]="  active"
+    [status.agent_inactive]="  inactive / not running"
+    [status.agent_not_installed]="  Not installed"
+    [reset.header]="== Reset Admin Token =="
+    [reset.confirm_prompt]="Confirm? Type yes to continue: "
+    [reset.cancelled]="Cancelled"
+    [reset.ok]="[OK]   New admin token generated"
+    [reset.save]="[Important] Save it now! Old token is invalid."
+    [reset.warn]="[Warning] This will generate a new admin token. Old token will be invalid!"
+)
+
 # ── 菜单 ───────────────────────────────────────────────────────────────────────
 show_menu() {
     echo ""
-    echo -e "${BLUE}━━━ Simple Probe 一键部署  v${SCRIPT_VERSION} (${SCRIPT_DATE}) ━━━━━━━━${NC}"
-    echo -e "  系统: ${GREEN}$(detect_os)${NC}  架构: ${GREEN}$(detect_arch)${NC}"
-    echo -e "  本版要点: ${SCRIPT_NOTES}"
+    printf "${BLUE}$(msg "menu.header")${NC}\n" "$SCRIPT_VERSION" "$SCRIPT_DATE"
+    echo -e "  $(msg "menu.os") ${GREEN}$(detect_os)${NC}  $(msg "menu.arch") ${GREEN}$(detect_arch)${NC}"
+    echo -e "  $(msg "menu.notes") ${SCRIPT_NOTES}"
     # 静默检查远端是否有新版（超时即跳过，不影响离线/弱网使用）
     local _rv; _rv="$(remote_script_version)"
     if version_gt "$_rv" "$SCRIPT_VERSION"; then
-        echo -e "  ${YELLOW}▲ 发现新版 v${_rv}（当前 v${SCRIPT_VERSION}），建议先选「4) 更新安装脚本」${NC}"
+        echo -e "  ${YELLOW}$(msg "menu.new_version" "$_rv" "$SCRIPT_VERSION")${NC}"
     elif [[ -n "$_rv" ]]; then
-        echo -e "  ${GREEN}✓ 已是最新脚本 (v${SCRIPT_VERSION})${NC}"
+        echo -e "  ${GREEN}$(msg "menu.up_to_date" "$SCRIPT_VERSION")${NC}"
     fi
     echo ""
-    echo "  1) 安装服务端 (Docker)"
-    echo "  2) 安装受控端 Agent (systemd)"
-    echo "  3) 更新受控端 (拉取最新 agent 代码)"
-    echo "  4) 更新安装脚本 (install.sh 自身)"
-    echo "  5) 更新服务端 (拉取最新 + 重建)"
-    echo "  6) 查看状态"
-    echo "  7) 卸载"
-    echo "  8) 数据库管理（备份/恢复/统计）"
-    echo "  0) 退出"
+    echo "  $(msg "menu.install_server")"
+    echo "  $(msg "menu.install_agent")"
+    echo "  $(msg "menu.update_agent")"
+    echo "  $(msg "menu.update_script")"
+    echo "  $(msg "menu.update_server")"
+    echo "  $(msg "menu.status")"
+    echo "  $(msg "menu.uninstall")"
+    echo "  $(msg "menu.db_manage")"
+    echo "  $(msg "menu.exit")"
     echo ""
     # L-3 修复：read 遇 EOF（Ctrl+D / 管道关闭）时返回非零，set -euo pipefail 会异常退出；加 || exit 0 让 EOF 优雅退出
-    read -r -p "请选择 [0-8]: " c || exit 0
+    read -r -p "$(msg "menu.prompt")" c || exit 0
     case "$c" in
         1) install_server ;;
         2) install_agent ;;

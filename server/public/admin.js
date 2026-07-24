@@ -49,6 +49,8 @@ function enterApp() {
   settingsLoaded = false;
   loadAppSettings();
   refresh();
+  // 应用 i18n 翻译到 DOM
+  if (window.I18N) I18N.applyDOM();
 }
 // 显示独立登录页
 function showLoginPage() {
@@ -63,7 +65,7 @@ function showLoginPage() {
 async function doLogin() {
   const token = $('loginToken').value.trim();
   const totp = $('loginTotp').value.trim();
-  if (!token) { $('loginErr').textContent = '请输入管理员 Token'; return; }
+  if (!token) { $('loginErr').textContent = I18N.t('login.error_empty_token'); return; }
   try {
     const r = await fetch('/api/login', {
       method: 'POST', credentials: 'same-origin',
@@ -72,8 +74,8 @@ async function doLogin() {
     });
     const j = await r.json().catch(() => ({}));
     if (r.status !== 200) {
-      if (j.need_totp) { totpRequired = true; if ($('loginTotpField')) $('loginTotpField').style.display = ''; $('loginErr').textContent = '请输入动态码'; if ($('loginTotp')) $('loginTotp').focus(); return; }
-      $('loginErr').textContent = j.error || '登录失败';
+      if (j.need_totp) { totpRequired = true; if ($('loginTotpField')) $('loginTotpField').style.display = ''; $('loginErr').textContent = I18N.t('login.error_need_totp'); if ($('loginTotp')) $('loginTotp').focus(); return; }
+      $('loginErr').textContent = j.error || I18N.t('login.error_failed');
       return;
     }
     totpRequired = !!j.totp;
@@ -87,7 +89,7 @@ async function doLogout() {
 function showLogin(need) {
   if (need) totpRequired = true;
   showLoginPage();
-  toast('登录已过期，请重新登录' + (need ? '（需要动态码）' : ''));
+  toast(I18N.t('login.expired') + (need ? I18N.t('login.expired_totp') : ''));
 }
 // ---- 设置中心：加载并应用 ----
 async function loadAppSettings() {
@@ -115,7 +117,7 @@ function applyCustomCss() {
   link.href = '/custom.css?t=' + Date.now();
 }
 function applySiteTitle() {
-  const t = appSettings.site_title || 'Simple Probe';
+  const t = appSettings.site_title || '谛听轻量探针';
   document.title = t + ' · Host Monitor';
   if ($('siteTitle')) $('siteTitle').innerHTML = '🛰️ ' + esc(t) + '<span class="dot">.</span>';
   if ($('loginTitle')) $('loginTitle').textContent = t;
@@ -191,7 +193,7 @@ async function api(url, opts = {}) {
     let need = false;
     try { const j = await res.json(); need = !!(j && j.need_totp); } catch (e) {}
     showLogin(need);
-    toast('未授权：请先登录' + (need ? '（需要动态码）' : ''));
+    toast(I18N.t('login.unauthorized') + (need ? I18N.t('login.unauthorized_totp') : ''));
     throw new Error('unauthorized');
   }
   if (!res.ok) {
@@ -502,15 +504,15 @@ function copyText(id) {
   const el = $(id); if (!el) return;
   const text = el.textContent;
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板')).catch(() => fallbackCopy(text));
+    navigator.clipboard.writeText(text).then(() => toast(I18N.t('toast.copied'))).catch(() => fallbackCopy(text));
   } else { fallbackCopy(text); }
 }
 function fallbackCopy(text) {
   const ta = document.createElement('textarea');
   ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); toast('已复制到剪贴板'); }
-  catch (e) { toast('复制失败，请手动选择文本'); }
+  try { document.execCommand('copy'); toast(I18N.t('toast.copied')); }
+  catch (e) { toast(I18N.t('toast.copy_failed')); }
   document.body.removeChild(ta);
 }
 
@@ -532,7 +534,7 @@ function quickToggleTheme() {
   localStorage.setItem('theme', next);
   applyTheme(next);
   updateThemeBtn();
-  toast('主题：' + (next === 'dark' ? '暗色' : '亮色'));
+  toast(I18N.t('toast.theme_' + (next === 'dark' ? 'dark' : 'light')));
 }
 
 // ---------- 拖拽排序（桌面端 HTML5 Drag；移动端仍用排序下拉 default_sort） ----------
@@ -688,7 +690,7 @@ function openCreate() {
   // 预填：优先用「设置」里的全局默认，否则用内置模版，确保用户看到的是正确格式，只需改 IP。
   if ($('c_probe_targets')) $('c_probe_targets').value = appSettings.probe_targets || DEFAULT_PROBE_TARGETS;
   const btn = $('btnCreateSubmit');
-  if (btn) { btn.dataset.done = ''; btn.textContent = '创建并生成 Token'; btn.disabled = false; }
+  if (btn) { btn.dataset.done = ''; btn.textContent = I18N.t('toast.create_default_btn'); btn.disabled = false; }
   const res = $('createResult'); if (res) res.innerHTML = '';
   disableCreateForm(false);
   openModal('createModal');
@@ -729,7 +731,7 @@ async function submitCreate() {
   if (btn.disabled) return;
   // 已经生成过 token：本次点击视为「完成 / 关闭」，避免重复创建第二张卡片
   if (btn.dataset.done === '1') { closeModal('createModal'); return; }
-  btn.disabled = true; btn.textContent = '创建中…';
+  btn.disabled = true; btn.textContent = I18N.t('toast.creating');
   $('createResult').innerHTML = '';
   try {
     const r = await api('/api/agents', {
@@ -755,8 +757,8 @@ async function submitCreate() {
     disableCreateForm(true);
   } catch (e) { toast('创建失败：' + e.message); }
   finally {
-    if (btn.dataset.done === '1') { btn.disabled = false; btn.textContent = '完成'; }
-    else { btn.disabled = false; btn.textContent = '创建并生成 Token'; }
+    if (btn.dataset.done === '1') { btn.disabled = false; btn.textContent = I18N.t('toast.done'); }
+    else { btn.disabled = false; btn.textContent = I18N.t('toast.create_default_btn'); }
   }
 }
 
@@ -787,24 +789,24 @@ async function submitEdit() {
         probe_targets: $('e_probe_targets').value.trim()
       })
     });
-    closeModal('editModal'); toast('已保存', 'ok');
+    closeModal('editModal'); toast(I18N.t('toast.saved'), 'ok');
     // panel 打开时刷新面板数据（同节点保留面板不关）
     if (detailId) { loadDetail(); updateNavButtons(detailId); }
     refresh();
   } catch (e) { toast('保存失败：' + e.message, 'err'); }
 }
 async function submitDelete() {
-  if (!confirm('确认删除该客户端？历史数据将一并清除。')) return;
+  if (!confirm(I18N.t('edit.confirm_delete'))) return;
   try {
     await api(`/api/agents/${$('e_id').value}`, { method: 'DELETE' });
-    closeModal('editModal'); toast('已删除');
+    closeModal('editModal'); toast(I18N.t('toast.deleted'));
     history.back(); // 面板同步关闭
     refresh();
   } catch (e) { toast('删除失败：' + e.message); }
 }
 async function resetToken() {
   const id = $('e_id').value;
-  if (!confirm('确认重置该客户端 Token？旧 Token 立即失效，受控端需改用新 Token 后重启。')) return;
+  if (!confirm(I18N.t('edit.confirm_reset'))) return;
   try {
     const r = await api(`/api/agents/${id}/reset-token`, { method: 'POST' });
     const inst = r.install || {};
@@ -853,16 +855,16 @@ async function openModify() {
 
 // 客户端列表快捷操作（无需打开编辑弹窗）
 async function deleteClient(id) {
-  if (!confirm('确认删除该客户端？历史数据将一并清除。')) return;
+  if (!confirm(I18N.t('edit.confirm_delete'))) return;
   try {
     await api(`/api/agents/${id}`, { method: 'DELETE' });
-    toast('已删除');
+    toast(I18N.t('toast.deleted'));
     if (detailId && Number(detailId) === Number(id)) history.back();
     refresh();
   } catch (e) { toast('删除失败：' + e.message); }
 }
 async function resetClientToken(id) {
-  if (!confirm('确认重置该客户端 Token？旧 Token 立即失效，受控端需改用新 Token 后重启。')) return;
+  if (!confirm(I18N.t('edit.confirm_reset'))) return;
   try {
     const r = await api(`/api/agents/${id}/reset-token`, { method: 'POST' });
     toast('Token 已重置：' + r.token);
@@ -920,6 +922,11 @@ async function openSettings() {
     if ($('a_retention')) $('a_retention').value = appSettings.retention_days || 30;
     $('p_enabled').checked = !!appSettings.public_enabled;
     $('s_allow_ips').value = appSettings.admin_allow_ips || '';
+    // 语言选择
+    if ($('s_language')) {
+      var savedLang = localStorage.getItem('locale') || 'auto';
+      $('s_language').value = savedLang;
+    }
     populateThemeSelect();
     const hl = appSettings.home_layout || 'grid';
     document.querySelectorAll('input[name="homelayout"]').forEach(r => { r.checked = (r.value === hl); });
@@ -1021,7 +1028,7 @@ async function saveSettings() {
     appSettings = Object.assign(appSettings, ui);
     applyCustomCss(); applySiteTitle();
     if ($('sortSelect')) $('sortSelect').value = ui.default_sort;
-    toast('设置已保存', 'ok');
+    toast(I18N.t('toast.settings_saved'), 'ok');
     refresh();
   } catch (e) { toast('保存失败：' + e.message, 'err'); }
 }
@@ -1103,6 +1110,15 @@ function bindEvents() {
   $('btnTestNotify').addEventListener('click', testNotify);
   $('btnAddGroup').addEventListener('click', addGroup);
   $('sortSelect').addEventListener('change', onSortChange);
+  // 语言切换：选择后立即保存并刷新
+  if ($('s_language')) {
+    $('s_language').addEventListener('change', function () {
+      var lang = this.value;
+      if (lang === 'auto') { localStorage.removeItem('locale'); }
+      else { localStorage.setItem('locale', lang); }
+      location.reload();
+    });
+  }
   $('rangeBar').addEventListener('click', (e) => {
     const b = e.target.closest('[data-r]');
     if (b) setRange(b.getAttribute('data-r'), b);
@@ -1134,7 +1150,7 @@ function bindEvents() {
       const v = e.target.value;
       localStorage.setItem('theme', v);
       applyTheme(v);
-      toast('主题：' + ({ auto: '跟随系统', light: '亮色', dark: '暗色' }[v]));
+      toast(I18N.t('toast.theme_' + v));
     });
   });
   document.addEventListener('click', (e) => {
