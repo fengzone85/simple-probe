@@ -44,7 +44,7 @@ docker run -d \
   -e SERVER_URL="https://<你的域名>" \
   -v /proc:/host/proc:ro \
   --read-only \
-  ghcr.io/fengzone85/simple-probe-agent:latest
+  ghcr.io/fengzone85/diting-agent:latest
 ```
 
 ### Linux（原生 systemd）

@@ -29,7 +29,7 @@ docker run -d \
   --read-only \
   --cap-drop ALL \
   --security-opt no-new-privileges \
-  ghcr.io/fengzone85/simple-probe-agent:latest
+  ghcr.io/fengzone85/diting-agent:latest
 ```
 
 ## 原生 systemd 部署

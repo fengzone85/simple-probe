@@ -58,7 +58,7 @@ PROBE_TARGETS=1.1.1.1:443,8.8.8.8:443
 version: '3'
 services:
   server:
-    image: ghcr.io/fengzone85/diting:latest
+    build: ./server
     ports:
       - "3000:3000"
     volumes:
@@ -72,7 +72,7 @@ services:
     restart: unless-stopped
 
   agent:
-    image: ghcr.io/fengzone85/simple-probe-agent:latest
+    image: ghcr.io/fengzone85/diting-agent:latest
     environment:
       - AGENT_TOKEN=your-agent-token
       - SERVER_URL=https://monitor.example.com
