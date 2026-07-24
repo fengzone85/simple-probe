@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>谛听轻量探针 · Simple Probe — 公开状态页演示</title>
+  <meta name="description" content="谛听轻量探针（Simple Probe）—— 自托管 Docker 监控，受控端零入站，无指令通道。" />
+  <style>
+    /* ============ 设计令牌 ============ */
+    :root {
+      --bg: #f3f6fb; --bg-soft: #ffffff; --card: #ffffff; --card-hover: #f7faff;
+      --border: #e6ebf3; --text: #1f2733; --muted: #7c879a; --accent: #5b8def;
+      --accent2: #56cdbd; --green: #2fc27e; --red: #f0607e; --yellow: #f0b34b;
+      --breath: 91,141,239;
+      --radius: 18px; --radius-md: 14px; --radius-sm: 11px;
+      --shadow: 0 10px 28px rgba(31,45,70,.07); --shadow-soft: 0 4px 14px rgba(31,45,70,.05);
+    }
+    :root[data-theme="light"] {
+      --bg: #f3f6fb; --bg-soft: #ffffff; --card: #ffffff; --card-hover: #f7faff;
+      --border: #e6ebf3; --text: #1f2733; --muted: #7c879a; --accent: #5b8def;
+      --accent2: #56cdbd; --green: #2fc27e; --red: #f0607e; --yellow: #f0b34b;
+      --breath: 91,141,239;
+      --shadow: 0 10px 28px rgba(31,45,70,.07); --shadow-soft: 0 4px 14px rgba(31,45,70,.05);
+    }
+    :root[data-theme="dark"] {
+      --bg: #0e1320; --bg-soft: #161d2e; --card: #182033; --card-hover: #1d2539;
+      --border: #283250; --text: #e9edf6; --muted: #8a93a8; --accent: #6f9bff;
+      --accent2: #56cdbd; --green: #3fd089; --red: #ff6b8a; --yellow: #f6bd55;
+      --breath: 80,220,255;
+      --shadow: 0 12px 32px rgba(0,0,0,.38); --shadow-soft: 0 6px 18px rgba(0,0,0,.28);
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]):not([data-theme="light"]) {
+        --bg: #f3f6fb; --bg-soft: #ffffff; --card: #ffffff; --card-hover: #f7faff;
+        --border: #e6ebf3; --text: #1f2733; --muted: #7c879a; --accent: #5b8def;
+        --accent2: #56cdbd; --green: #2fc27e; --red: #f0607e; --yellow: #f0b34b;
+        --breath: 91,141,239;
+        --shadow: 0 10px 28px rgba(31,45,70,.07); --shadow-soft: 0 4px 14px rgba(31,45,70,.05);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+      background: radial-gradient(1200px 620px at 85% -12%, #e6eefc 0%, var(--bg) 58%);
+      color: var(--text); min-height: 100vh;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: radial-gradient(1200px 620px at 85% -12%, #1a2540 0%, var(--bg) 58%); }
+    }
+
+    /* ============ 按钮 ============ */
+    .btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; border: 0; padding: 9px 16px; border-radius: var(--radius-sm); font-weight: 700;
+      cursor: pointer; font-size: 13px; transition: transform .1s, filter .1s, box-shadow .1s;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: var(--shadow-soft); }
+    .btn.ghost { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); }
+    .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.sm { padding: 6px 11px; font-size: 12px; border-radius: 10px; }
+
+    /* ============ 公开页 ============ */
+    .public-view { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+    .pv-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .pv-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; }
+    .sb-logo { font-size: 28px; }
+    .pv-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-btn {
+      width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--bg-soft); cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: var(--text); text-decoration: none; transition: border-color .15s, color .15s;
+    }
+    .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ============ 概览 ============ */
+    .pv-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-soft); }
+    .stat .k { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .stat .v { font-size: 28px; font-weight: 800; margin-top: 4px; }
+    .stat .v.green { color: var(--green); }
+    .stat .v.red { color: var(--red); }
+
+    /* ============ 工具栏 ============ */
+    .pv-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .toolbar-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+
+    /* ============ 卡片网格 ============ */
+    .pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 18px; box-shadow: var(--shadow-soft); transition: transform .15s, box-shadow .15s, border-color .15s;
+      position: relative; overflow: hidden;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: rgba(var(--breath), .4); }
+    .card .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .card .top h3 { margin: 0; font-size: 15px; font-weight: 700; }
+    .status { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status.on { background: var(--green); box-shadow: 0 0 8px rgba(47,194,126,.5); }
+    .status.offline { background: var(--muted); }
+    .status.alert { background: var(--yellow); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+    .card .meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .card .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric { display: flex; flex-direction: column; gap: 2px; }
+    .metric .m-lbl { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+    .metric .m-val { font-size: 14px; font-weight: 700; }
+    .metric .m-val.bar-warn { color: var(--yellow); }
+    .metric .m-val.bar-danger { color: var(--red); }
+    .card .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background: rgba(var(--breath), .12); color: var(--accent); }
+    .badge.flag { background: rgba(86,205,189,.12); color: var(--accent2); }
+
+    /* ============ 列表视图 ============ */
+    .pv-list { margin-bottom: 40px; }
+    .ctable { width: 100%; border-collapse: collapse; background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-soft); }
+    .ctable th { text-align: left; padding: 12px 14px; font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    .ctable td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .ctable tr:last-child td { border-bottom: 0; }
+    .ctable .ct-name { font-weight: 600; }
+    .ctable .ct-sub { font-size: 11px; color: var(--muted); }
+    .ctable .ct-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .ctable .ct-num.danger { color: var(--red); }
+    .ctable .ct-num.warn { color: var(--yellow); }
+    .ctable tr:hover { background: var(--card-hover); }
+
+    /* ============ 页脚 ============ */
+    .pv-footer { text-align: center; padding: 30px 0; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 30px; }
+    .pv-footer a { color: var(--accent); text-decoration: none; }
+    .pv-footer a:hover { text-decoration: underline; }
+
+    /* ============ 演示横幅 ============ */
+    .demo-banner {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; text-align: center; padding: 10px 20px; font-size: 13px; font-weight: 600;
+    }
+    .demo-banner a { color: #fff; text-decoration: underline; }
+
+    /* ============ 空状态 ============ */
+    .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+
+    @media (max-width: 640px) {
+      .pv-overview { grid-template-columns: repeat(2, 1fr); }
+      .pv-grid { grid-template-columns: 1fr; }
+      .card .metrics { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-banner">
+    🎉 这是 <strong>谛听轻量探针</strong> 公开状态页效果演示 · <a href="https://github.com/fengzone85/diting">GitHub</a> · <a href="https://github.com/fengzone85/diting/blob/master/install.sh">一键部署</a>
+  </div>
+
+  <div id="publicView" class="public-view">
+    <header class="pv-topbar">
+      <div class="pv-brand"><span class="sb-logo">🛰️</span><span>谛听轻量探针</span></div>
+      <div class="pv-actions">
+        <button class="icon-btn" id="pvTheme" title="切换暗亮主题">🌙</button>
+        <a class="icon-btn" href="https://github.com/fengzone85/diting" target="_blank" rel="noopener" title="GitHub">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.09.66-.22.66-.48 0-.24-.01-.87-.01-1.7-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.16.58.67.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+        </a>
+      </div>
+    </header>
+
+    <div class="pv-content">
+      <section class="overview pv-overview" id="pvOverview"></section>
+
+      <div class="toolbar pv-toolbar">
+        <span class="toolbar-label">布局</span>
+        <button class="btn ghost sm active" data-pvlayout="grid">卡片</button>
+        <button class="btn ghost sm" data-pvlayout="list">列表</button>
+      </div>
+
+      <section class="grid pv-grid" id="pvGrid"></section>
+      <section class="pv-list" id="pvList" hidden></section>
+    </div>
+
+    <footer class="pv-footer">
+      Powered by <a href="https://github.com/fengzone85/diting" target="_blank">谛听轻量探针 · Simple Probe</a> · v1.0.0
+    </footer>
+  </div>
+
+<script>
+// ============ 演示数据 ============
+var DEMO_AGENTS = [
+  { id: 'agt_001', name: '香港 CN2-GIA', group: '海外', country: 'hk', online: true, cpu: 12.5, mem_pct: 34.2, disk_pct: 45.1, load1: 0.15, uptime: 2592000, net_rx_rate: 102400, net_tx_rate: 51200, net_rx_month: 10737418240, net_tx_month: 5368709120, os: 'Ubuntu 22.04', hostname: 'hk-cn2-01', merchant: 'Bandwagon', expire_at: '2026-12-31', probes: { '移动': { ms: 45, ok: true }, '电信': { ms: 32, ok: true }, '联通': { ms: 38, ok: true } } },
+  { id: 'agt_002', name: '东京 BGP', group: '海外', country: 'jp', online: true, cpu: 5.3, mem_pct: 22.1, disk_pct: 28.7, load1: 0.05, uptime: 604800, net_rx_rate: 51200, net_tx_rate: 25600, net_rx_month: 5368709120, net_tx_month: 2684354560, os: 'Debian 12', hostname: 'jp-bgp-01', merchant: 'Vultr', expire_at: '2026-10-15', probes: { '移动': { ms: 78, ok: true }, '电信': { ms: 65, ok: true }, '联通': { ms: 72, ok: true } } },
+  { id: 'agt_003', name: '深圳 腾讯云', group: '国内', country: 'cn', online: true, cpu: 28.7, mem_pct: 56.3, disk_pct: 62.4, load1: 0.42, uptime: 1209600, net_rx_rate: 204800, net_tx_rate: 102400, net_rx_month: 21474836480, net_tx_month: 10737418240, os: 'CentOS 8', merchant: 'Tencent', expire_at: '2027-01-01', probes: { '移动': { ms: 12, ok: true }, '电信': { ms: 8, ok: true }, '联通': { ms: 15, ok: true } } },
+  { id: 'agt_004', name: '洛杉矶 US-LA', group: '海外', country: 'us', online: false, cpu: 0, mem_pct: 0, disk_pct: 0, load1: 0, uptime: 0, net_rx_rate: 0, net_tx_rate: 0, net_rx_month: 0, net_tx_month: 0, os: '', hostname: '', merchant: 'DMIT', expire_at: '2026-08-20', probes: {} },
+  { id: 'agt_005', name: '法兰克福 DE', group: '海外', country: 'de', online: true, cpu: 3.1, mem_pct: 18.5, disk_pct: 35.2, load1: 0.08, uptime: 1814400, net_rx_rate: 25600, net_tx_rate: 12800, net_rx_month: 2684354560, net_tx_month: 1342177280, os: 'Ubuntu 24.04', merchant: 'Hetzner', expire_at: '2027-03-15', probes: { '移动': { ms: 185, ok: true }, '电信': { ms: 168, ok: true }, '联通': { ms: 172, ok: true } } },
+  { id: 'agt_006', name: '新加坡 SG', group: '海外', country: 'sg', online: true, cpu: 45.2, mem_pct: 72.8, disk_pct: 55.6, load1: 0.85, uptime: 345600, net_rx_rate: 409600, net_tx_rate: 204800, net_rx_month: 42949672960, net_tx_month: 21474836480, os: 'Alpine Linux', merchant: 'Linode', expire_at: '2026-09-30', probes: { '移动': { ms: 68, ok: true }, '电信': { ms: 55, ok: true }, '联通': { ms: 62, ok: true } } }
+];
+
+// ============ 工具函数 ============
+function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function fmtBytes(b) { if (b == null) return '—'; const u = ['B','KB','MB','GB','TB']; let i = 0, n = Number(b); while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return n.toFixed(i ? 1 : 0) + ' ' + u[i]; }
+function fmtRate(bps) { return fmtBytes(Number(bps) || 0) + '/s'; }
+function fmtPct(p) { return (p == null ? '—' : Number(p).toFixed(1)) + '%'; }
+function fmtUptime(s) { s = Number(s) || 0; const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600); return d > 0 ? d + '天' + h + '时' : h + '时' + Math.floor((s % 3600) / 60) + '分'; }
+function pctClass(p) { if (p == null) return ''; if (p >= 90) return 'bar-danger'; if (p >= 75) return 'bar-warn'; return ''; }
+function daysUntil(d) { if (!d) return null; const date = new Date(d + 'T00:00:00'); if (isNaN(date)) return null; return Math.ceil((date - new Date()) / 86400000); }
+
+// ============ 主题 ============
+function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
+function currentTheme() { const t = document.documentElement.getAttribute('data-theme'); if (t === 'light' || t === 'dark') return t; return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; }
+function syncIcon() { const b = document.getElementById('pvTheme'); if (!b) return; b.textContent = currentTheme() === 'dark' ? '☀️' : '🌙'; }
+function toggleTheme() { const next = currentTheme() === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', next); applyTheme(next); syncIcon(); }
+document.getElementById('pvTheme').addEventListener('click', toggleTheme);
+applyTheme(localStorage.getItem('theme') || 'auto');
+syncIcon();
+
+// ============ 布局切换 ============
+var publicLayout = 'grid';
+document.querySelectorAll('[data-pvlayout]').forEach(function(b) {
+  b.addEventListener('click', function() {
+    publicLayout = this.getAttribute('data-pvlayout');
+    document.querySelectorAll('[data-pvlayout]').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+    render();
+  });
+});
+
+// ============ 渲染 ============
+function render() {
+  var agents = DEMO_AGENTS;
+  var online = 0, totalTraffic = 0;
+  agents.forEach(function(a) { if (a.online) { online++; totalTraffic += (a.net_rx_month || 0) + (a.net_tx_month || 0); } });
+
+  // 概览
+  document.getElementById('pvOverview').innerHTML =
+    '<div class="stat"><div class="k">客户端总数</div><div class="v">' + agents.length + '</div></div>' +
+    '<div class="stat"><div class="k">在线</div><div class="v green">' + online + '</div></div>' +
+    '<div class="stat"><div class="k">离线</div><div class="v red">' + (agents.length - online) + '</div></div>' +
+    '<div class="stat"><div class="k">本月总流量</div><div class="v">' + fmtBytes(totalTraffic) + '</div></div>';
+
+  if (publicLayout === 'grid') {
+    document.getElementById('pvGrid').hidden = false;
+    document.getElementById('pvList').hidden = true;
+    document.getElementById('pvGrid').innerHTML = agents.map(cardHtml).join('');
+  } else {
+    document.getElementById('pvGrid').hidden = true;
+    document.getElementById('pvList').hidden = false;
+    document.getElementById('pvList').innerHTML = listHtml(agents);
+  }
+}
+
+function cardHtml(a) {
+  var d = daysUntil(a.expire_at);
+  var badge = '';
+  if (d != null) { var cls = d < 0 ? 'expire' : (d <= 7 ? 'expire-soon' : ''); badge = '<span class="badge ' + cls + '">' + (d < 0 ? '已过期 ' + (-d) + '天' : '剩 ' + d + ' 天') + '</span>'; }
+  var countryName = { cn: '中国', hk: '香港', jp: '日本', us: '美国', de: '德国', sg: '新加坡', kr: '韩国', tw: '台湾' }[a.country] || a.country;
+  var countryBadge = a.country ? '<span class="badge flag">' + countryName + '</span>' : '';
+  var statusCls = a.online ? (a.cpu >= 90 ? 'alert' : 'on') : 'offline';
+  var probes = a.probes || '';
+  var probeHtml = '';
+  if (probes) {
+    var pk = Object.keys(probes);
+    probeHtml = '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">' + pk.map(function(k) {
+      var p = probes[k]; return '<span class="badge">' + k + ' ' + (p.ok ? (p.ms + 'ms') : '—') + '</span>';
+    }).join('') + '</div>';
+  }
+  return '<div class="card">' +
+    '<div class="top"><span class="status ' + statusCls + '"></span><h3>' + esc(a.name) + '</h3>' + countryBadge + badge + '</div>' +
+    '<div class="meta">' + (a.online ? esc(a.hostname || '') + ' · ' + esc(a.os || '') : '离线') + ' · ' + esc(a.merchant || '') + '</div>' +
+    '<div class="metrics">' +
+    '<div class="metric"><span class="m-lbl">CPU</span><span class="m-val ' + pctClass(a.cpu) + '">' + fmtPct(a.cpu) + '</span></div>' +
+    '<div class="metric"><span class="m-lbl">内存</span><span class="m-val ' + pctClass(a.mem_pct) + '">' + fmtPct(a.mem_pct) + '</span></div>' +
+    '<div class="metric"><span class="m-lbl">硬盘</span><span class="m-val ' + pctClass(a.disk_pct) + '">' + fmtPct(a.disk_pct) + '</span></div>' +
+    '<div class="metric"><span class="m-lbl">负载</span><span class="m-val">' + (a.load1 != null ? a.load1.toFixed(2) : '—') + '</span></div>' +
+    '</div>' + probeHtml +
+    '<div class="foot"><span>⏱ ' + (a.online ? fmtUptime(a.uptime) : '—') + '</span><span>↓↑ ' + fmtBytes((a.net_rx_month || 0) + (a.net_tx_month || 0)) + '</span></div>' +
+    '</div>';
+}
+
+function listHtml(agents) {
+  var rows = agents.map(function(a) {
+    var statusCls = a.online ? 'on' : 'offline';
+    return '<tr>' +
+      '<td><div class="ct-name"><span class="status ' + statusCls + '"></span>' + esc(a.name) + '</div><div class="ct-sub">' + esc(a.group || '') + (a.online ? ' · ' + esc(a.hostname || '') : ' · 离线') + '</div></td>' +
+      '<td class="ct-num ' + pctClass(a.cpu) + '">' + fmtPct(a.cpu) + '</td>' +
+      '<td class="ct-num ' + pctClass(a.mem_pct) + '">' + fmtPct(a.mem_pct) + '</td>' +
+      '<td class="ct-num ' + pctClass(a.disk_pct) + '">' + fmtPct(a.disk_pct) + '</td>' +
+      '<td class="ct-num">' + (a.online ? fmtUptime(a.uptime) : '—') + '</td>' +
+      '<td class="ct-sub">' + (a.online ? esc(a.os || '') : '—') + '</td>' +
+      '<td class="ct-num">↓' + fmtRate(a.net_rx_rate) + ' ↑' + fmtRate(a.net_tx_rate) + '</td>' +
+      '</tr>';
+  }).join('');
+  return '<table class="ctable"><thead><tr><th>名称</th><th>CPU</th><th>内存</th><th>硬盘</th><th>在线时长</th><th>系统</th><th>实时网速</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+render();
+</script>
+</body>
+</html>
