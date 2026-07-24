@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# pre-commit 钩子：阻止提交不该入库的文件
+# 安装：git config core.hooksPath .github/hooks
+
+BLOCKED_PATTERNS=(
+    '\.env$'
+    '\.db$'
+    '\.out$'
+    'node_modules/'
+    '__pycache__/'
+    '\.vps_test/'
+    '\.workbuddy/'
+    '\.codebuddy/'
+    'DUAL_DEPLOYMENT_PLAN\.md$'
+    'competitive_analysis.*\.md$'
+    'UI_REDESIGN_PLAN\.md$'
+    'project_review.*\.md$'
+    'P0_DELIVERY\.md$'
+    'security_audit_report\.md$'
+    'public_os_test\.png$'
+    'card_view\.yaml$'
+    'docker-compose\.test\.yml$'
+    '_review_test\.js$'
+    'test-notify\.js$'
+)
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACR)
+HAS_ERROR=0
+
+if [[ -n "$STAGED_FILES" ]]; then
+    while IFS= read -r file; do
+        for pattern in "${BLOCKED_PATTERNS[@]}"; do
+            if echo "$file" | grep -qE "$pattern"; then
+                echo "[pre-commit] ❌ 阻止提交: $file (匹配: $pattern)"
+                HAS_ERROR=1
+            fi
+        done
+    done <<< "$STAGED_FILES"
+fi
+
+if [[ $HAS_ERROR -eq 1 ]]; then
+    echo ""
+    echo "[pre-commit] 提交被拒绝。请从暂存区移除上述文件："
+    echo "  git reset HEAD <file>"
+    echo "  或添加到 .gitignore"
+    exit 1
+fi
+
+exit 0
