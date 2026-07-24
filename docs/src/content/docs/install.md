@@ -44,6 +44,51 @@ npm start
 
 详见 [受控端部署](/agent/) 和 [原生 Linux 部署](/native/)。
 
+## 数据库管理
+
+安装脚本集成数据库备份/恢复/统计命令，无需手动定位文件或停服：
+
+```bash
+# 备份数据库（默认存到 /var/backups/simple-probe/）
+sudo bash install.sh --backup
+
+# 备份到指定路径
+sudo bash install.sh --backup /tmp/my-backup.db
+
+# 从备份恢复（恢复前自动备份当前状态，可回滚）
+sudo bash install.sh --restore /var/backups/simple-probe/monitor_20260723_141022.db
+
+# 列出已有备份
+sudo bash install.sh --backup-list
+
+# 查看数据库统计（大小/记录数/时间范围）
+sudo bash install.sh --db-stats
+```
+
+**恢复安全机制**：
+- 恢复前自动备份当前数据库（`pre_restore_*.db`），误操作可回滚
+- 备份文件自动校验 SQLite 完整性（魔数 + `PRAGMA integrity_check`）
+- 需输入 `yes` 确认才执行覆盖
+
+**定时备份**（crontab）：
+
+```bash
+# 每天凌晨 3 点自动备份
+0 3 * * * root bash /usr/local/bin/simple-probe-install.sh --backup
+```
+
+## 数据保留与自动清理
+
+服务端每小时自动清理过期的指标数据（`metrics` 表），控制数据库体积。
+
+| 配置方式 | 说明 | 优先级 |
+|---|---|---|
+| 后台设置（推荐） | 「设置 → 告警规则 → 指标保留天数」，范围 7-3650 天 | 高 |
+| 环境变量 | `RETENTION_DAYS`（docker-compose / .env） | 中 |
+| 硬编码默认 | 30 天 | 低 |
+
+后台设置保存后 1 小时内自动生效，无需重启服务。
+
 ## 反向代理
 
 推荐使用 Nginx 或 Caddy 配置 HTTPS：

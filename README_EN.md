@@ -310,6 +310,41 @@ docker compose up -d                 # serves on http://<host>:8080
 
 > ⚠️ This quick start exposes the server on plaintext `:8080`. The admin token would travel unencrypted, so **do not use it for production**. For production, always put Nginx + TLS in front (see section A above).
 
+## Data management
+
+The database (SQLite single file) stores all agent records, historical metrics, and settings. Manage it via `install.sh` commands — no need to manually locate files or stop services:
+
+```bash
+# Hot backup (via sqlite3 .backup, non-disruptive)
+sudo bash install.sh --backup
+
+# Backup to a specific path
+sudo bash install.sh --backup /tmp/my-backup.db
+
+# Restore from backup (auto-backs up current state first, rollback-capable)
+sudo bash install.sh --restore /var/backups/simple-probe/monitor_20260723_141022.db
+
+# List existing backups
+sudo bash install.sh --backup-list
+
+# View database statistics (size / row count / time range)
+sudo bash install.sh --db-stats
+```
+
+### Scheduled backup
+
+```bash
+# crontab: automatic daily backup at 3:00 AM
+0 3 * * * root bash /usr/local/bin/simple-probe-install.sh --backup
+```
+
+### Backup mechanism
+
+- **Hot backup**: uses `sqlite3 .backup` command first; no service interruption during backup
+- **Safe restore**: auto-backs up current database as `pre_restore_*.db` before restoring; rollback-capable on misoperation
+- **Integrity check**: auto-validates backup files before restore (SQLite magic + `PRAGMA integrity_check`)
+- **Auto-discovery**: auto-detects Docker volume or host file path; no manual lookup needed
+
 ## Environment variables
 
 **Server `.env`**: `PORT`, `ADMIN_TOKEN`, `OFFLINE_THRESHOLD_SEC` (default 60), `RETENTION_DAYS` (default 30), `ALERT_CPU_PCT`/`ALERT_MEM_PCT` (default 90), `ALERT_COOLDOWN_SEC`, `SMTP_*` (QQ Mail alerts), `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (optional, Telegram alerts), `READONLY_TOKEN` (optional, read-only account — see below), `SESSION_SECRET`/`SESSION_TTL_MS` (2FA session — see "Two-factor authentication (TOTP)").
@@ -339,6 +374,18 @@ To avoid sharing the full-privilege admin token around, configure an optional **
 - Holders may **only call read-only `GET` endpoints** (client list, latest metrics, sparklines, `/metrics`); all write operations (`POST /agents`, `PUT/DELETE /agents/:id`, `reset-token`, `/test-alert`) are blocked by the `adminOnly` guard with `401`.
 - Ideal for read-only consumers like Grafana / third-party dashboards, so the admin token is not exposed to them.
 - The read-only account is **not subject to 2FA** (2FA only constrains admin writes), keeping programmatic read pulls transparent.
+
+## Data retention (auto-cleanup)
+
+The server automatically cleans up expired metric data (the `metrics` table) every hour to prevent unbounded database growth. The retention period is configurable:
+
+| Method | Description | Priority |
+|---|---|---|
+| Admin panel (recommended) | "Settings → Alert Rules → Metric retention days", range 7-3650 days | High |
+| Environment variable | `RETENTION_DAYS` (docker-compose / .env) | Medium |
+| Hardcoded default | 30 days | Low |
+
+Changes from the admin panel take effect **within 1 hour** — no restart required. Historical metrics older than the retention period are permanently deleted. For long-term data preservation, use "Data Management → Scheduled Backup" in combination.
 
 ## Prometheus metrics export (`/metrics`)
 

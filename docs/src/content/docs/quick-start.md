@@ -59,8 +59,29 @@ curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/
 
 下载 `agent/windows/` 下的脚本，以管理员身份运行 `install.ps1`。
 
+## 数据管理
+
+### 数据保留
+
+服务端每小时自动清理过期指标。默认保留 30 天，可在「设置 → 告警规则」调整（7-3650 天），也可通过环境变量 `RETENTION_DAYS` 设置。
+
+### 数据备份
+
+部署完成后建议立即备份数据库，并设置定时自动备份：
+
+```bash
+# 首次备份
+sudo bash install.sh --backup
+
+# 设置每天凌晨 3 点自动备份（需 root）
+(crontab -l 2>/dev/null; echo "0 3 * * * root bash $(which simple-probe-install.sh || echo /usr/local/bin/simple-probe-install.sh) --backup") | crontab -
+```
+
+> 数据库包含全部 Agent 记录、历史监控数据、设置项。Docker 重建容器不会丢失数据，但整机迁移或卷删除前需手动备份。
+
 ## 下一步
 
 - [服务端详细配置](/server/)
 - [受控端部署指南](/agent/)
 - [安全加固](/security/)
+- [安装指南 — 数据库管理](/install/#数据库管理)

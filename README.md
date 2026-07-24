@@ -416,6 +416,41 @@ sudo bash install.sh --update-agent
 | 服务端 | `sudo bash install.sh --update-server` | 否（自动 git 同步） |
 | 受控端 | `sudo bash install.sh --update-agent` | 否（复用已存 `agent.env`） |
 
+## 数据管理
+
+数据库（SQLite 单文件）存储全部 Agent 记录、历史指标、设置项。通过 `install.sh` 管理命令操作，无需手动定位文件或停服：
+
+```bash
+# 热备份（通过 sqlite3 .backup，不中断服务）
+sudo bash install.sh --backup
+
+# 备份到指定路径
+sudo bash install.sh --backup /tmp/my-backup.db
+
+# 从备份恢复（恢复前自动备份当前状态，可回滚）
+sudo bash install.sh --restore /var/backups/simple-probe/monitor_20260723_141022.db
+
+# 列出已有备份
+sudo bash install.sh --backup-list
+
+# 查看数据库统计（大小/记录数/时间范围）
+sudo bash install.sh --db-stats
+```
+
+### 定时备份
+
+```bash
+# crontab 每天凌晨 3 点自动备份
+0 3 * * * root bash /usr/local/bin/simple-probe-install.sh --backup
+```
+
+### 备份机制
+
+- **热备份**：优先使用 `sqlite3 .backup` 命令，备份期间不中断监控服务
+- **恢复安全**：恢复前自动将当前数据库另存为 `pre_restore_*.db`，误操作可回滚
+- **完整性校验**：恢复前自动校验备份文件（SQLite 魔数 + `PRAGMA integrity_check`）
+- **智能定位**：自动检测 Docker 卷或宿主机文件路径，无需手动查找
+
 ## 环境变量
 
 **服务端 `.env`**：`PORT`、`ADMIN_TOKEN`、`OFFLINE_THRESHOLD_SEC`(默认60)、`RETENTION_DAYS`(默认30)、`ALERT_CPU_PCT`/`ALERT_MEM_PCT`(默认90)、`ALERT_COOLDOWN_SEC`、`SMTP_*`(QQ邮箱告警)、`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`(可选，Telegram 告警)、`READONLY_TOKEN`(可选，只读账号，见下文)、`SESSION_SECRET`/`SESSION_TTL_MS`(2FA 会话，见「两步验证（TOTP）」)。
@@ -445,6 +480,18 @@ sudo bash install.sh --update-agent
 - 持有者**仅能调用只读 `GET` 接口**（查看客户端列表、最新指标、sparkline、`/metrics`），所有写操作（`POST /agents`、`PUT/DELETE /agents/:id`、`reset-token`、`/test-alert`）由 `adminOnly` 守卫拦截，返回 `401`。
 - 适用于 Grafana / 第三方看板等只读消费场景，无需把 Admin Token 暴露给它们。
 - 只读账号**不强制 2FA**（2FA 仅约束 Admin 写操作），保持程序化只读拉取无感。
+
+## 数据保留（自动清理）
+
+服务端每小时自动清理过期的指标数据（`metrics` 表），防止数据库无限膨胀。保留天数可配置：
+
+| 配置方式 | 说明 | 优先级 |
+|---|---|---|
+| 后台设置（推荐） | 「设置 → 告警规则 → 指标保留天数」，范围 7-3650 天 | 高 |
+| 环境变量 | `RETENTION_DAYS`（docker-compose / .env） | 中 |
+| 硬编码默认 | 30 天 | 低 |
+
+后台设置保存后 **1 小时内自动生效**，无需重启服务。超出保留时长的历史指标将被永久删除，建议配合「数据管理 → 定时备份」保留长期数据。
 
 ## Prometheus 指标导出（`/metrics`）
 

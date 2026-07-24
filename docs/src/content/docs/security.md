@@ -71,6 +71,24 @@ Agent 之间互不通信，互不知道彼此存在。
 | CSRF 防护 | Cookie + SameSite |
 | 输入校验 | `validate.js` 统一校验 |
 
+## 数据保留
+
+服务端每小时自动清理过期指标，防止数据库无限膨胀。保留天数可在「设置 → 告警规则」配置（7-3650 天），也可通过环境变量 `RETENTION_DAYS` 设置（默认 30 天）。后台设置优先级高于环境变量，保存后 1 小时内自动生效，无需重启。
+
+## 数据备份
+
+数据库是监控系统的核心资产（含全部 Agent 记录、历史指标、设置），建议定期备份：
+
+```bash
+# 一键备份（热备份，不中断服务）
+sudo bash install.sh --backup
+
+# 定时自动备份（crontab）
+0 3 * * * root bash /usr/local/bin/simple-probe-install.sh --backup
+```
+
+备份文件默认存到 `/var/backups/simple-probe/`，包含完整数据库快照。恢复前会自动备份当前状态，确保可回滚。
+
 ## TOTP 2FA
 
 Simple Probe 支持 TOTP（基于时间的一次性密码），兼容 Google Authenticator、1Password 等。
