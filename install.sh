@@ -77,6 +77,9 @@ Simple Probe 一键部署脚本
   sudo bash install.sh --backup-list               # 列出已有备份
   sudo bash install.sh --db-stats                  # 查看数据库统计（大小/记录数/时间范围）
 
+  # 管理员 Token 重置（丢失 Token 时使用，需 SSH 登录服务器）
+  sudo bash install.sh --reset-admin-token         # 生成新管理员 Token（旧 Token 立即失效）
+
 选项：
   --install-server        安装服务端（Docker）
   --install-agent         安装受控端（systemd）
@@ -89,6 +92,7 @@ Simple Probe 一键部署脚本
   --restore <路径>        从备份恢复数据库（恢复前自动备份当前状态）
   --backup-list           列出已有备份
   --db-stats              查看数据库统计信息
+  --reset-admin-token     重置管理员 Token（丢失时使用，旧 Token 立即失效）
   --server URL            SERVER_URL
   --id / --token          节点 ID 与令牌（手动模式）
   --token-file FILE       从文件读取令牌（推荐，避免明文暴露）
@@ -362,6 +366,9 @@ install_server() {
     fi
 
     echo -e "${YELLOW}[信息] 构建并启动服务端（首次需编译 better-sqlite3，约 1-2 分钟）…${NC}"
+    # 写入构建时间（供页脚显示）
+    date +"%Y-%m-%d %H:%M:%S (%Z)" > build_time.txt
+    echo -e "${GREEN}[OK]   构建时间已写入 build_time.txt${NC}"
     # 先清理本项目旧实例，避免重跑/升级时端口或容器冲突（如 8080 已被占用）
     docker compose down 2>/dev/null || true
     docker compose up -d --build
@@ -479,6 +486,7 @@ update_server() {
         docker rm -f "$_cid" 2>/dev/null || true
     fi
     echo -e "${YELLOW}[信息] 重建并重启服务端…${NC}"
+    date +"%Y-%m-%d %H:%M:%S (%Z)" > build_time.txt
     docker compose up -d --build
     echo -e "${GREEN}[OK]   服务端已更新并重启${NC}"
 }
@@ -843,6 +851,81 @@ db_manage_menu() {
     esac
 }
 
+# 重置管理员 Token：仅通过 SSH 在服务器上运行，生成新 Token 并立即使旧 Token 失效
+do_reset_admin_token() {
+    echo "== 重置管理员 Token =="
+    echo ""
+    echo -e "${YELLOW}[警告] 此操作将生成新的管理员 Token，旧 Token 立即失效！${NC}"
+    read -r -p "确认重置？输入 yes 继续: " confirm || { echo "已取消"; return 0; }
+    [[ "$confirm" == "yes" ]] || { echo "已取消"; return 0; }
+
+    ensure_deps || return 1
+    ensure_docker || return 1
+
+    local new_token
+    new_token="adm_$(openssl rand -hex 24)"
+
+    # ① 若 .env 已配置 ADMIN_TOKEN，必须同步更新 .env：getAdminToken() 是 env 优先，
+    # 否则只写 DB 会被 .env 覆盖，reset 后旧 .env token 仍有效、新 token 无效。
+    local env_file="${SRC_DIR:-}/server/.env"
+    if [[ -f "$env_file" ]] && grep -q '^ADMIN_TOKEN=' "$env_file"; then
+        if grep -q '^ADMIN_TOKEN=.\+' "$env_file"; then
+            sed -i -E "s|^ADMIN_TOKEN=.*|ADMIN_TOKEN=$new_token|" "$env_file"
+        else
+            printf 'ADMIN_TOKEN=%s\n' "$new_token" >> "$env_file"
+        fi
+        echo -e "${YELLOW}[信息] 已同步更新 .env 的 ADMIN_TOKEN（env 优先于 DB）${NC}"
+    fi
+
+    # ② 写入 DB（覆盖 admin_token_raw），使无 .env 场景也生效
+    local loc; loc="$(locate_db)"
+    if [[ -z "$loc" ]]; then
+        echo -e "${RED}[错误] 无法定位数据库，确认服务端已安装${NC}" >&2
+        return 1
+    fi
+
+    local ok=0
+    if [[ "$loc" == docker:* ]]; then
+        local cid cpath
+        cid="$(echo "$loc" | cut -d: -f2)"
+        cpath="$(echo "$loc" | cut -d: -f4)"
+        # 优先用容器内 sqlite3；缺失则回退 better-sqlite3 节点脚本（server 容器自带）
+        if docker exec "$cid" sh -c "command -v sqlite3 >/dev/null 2>&1"; then
+            docker exec "$cid" sqlite3 "$cpath" "INSERT OR REPLACE INTO admin_config (key, value) VALUES ('admin_token_raw', '$new_token');" && ok=1
+        else
+            docker exec "$cid" node -e "const D=require('better-sqlite3'); const db=new D('$cpath'); db.prepare(\"INSERT OR REPLACE INTO admin_config (key,value) VALUES ('admin_token_raw',?)\").run('$new_token');" && ok=1
+        fi
+    elif [[ "$loc" == volume:* ]]; then
+        local vol; vol="$(echo "$loc" | cut -d: -f2)"
+        # 用 server 镜像（含 better-sqlite3）写入；sqlite3 CLI 可能不存在，故用 node
+        local simg; simg="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'simple-probe.*server|server' | head -n1)"
+        if [[ -n "$simg" ]]; then
+            docker run --rm -v "$vol":/data "$simg" node -e "const D=require('better-sqlite3'); const db=new D('/data/monitor.db'); db.prepare(\"INSERT OR REPLACE INTO admin_config (key,value) VALUES ('admin_token_raw',?)\").run('$new_token');" && ok=1
+        else
+            docker run --rm -v "$vol":/data alpine:3.20 sh -c "sqlite3 /data/monitor.db \"INSERT OR REPLACE INTO admin_config (key,value) VALUES ('admin_token_raw','$new_token');\"" && ok=1
+        fi
+    else
+        local fpath; fpath="$(echo "$loc" | cut -d: -f2)"
+        sqlite3 "$fpath" "INSERT OR REPLACE INTO admin_config (key, value) VALUES ('admin_token_raw', '$new_token');" && ok=1
+    fi
+    if [[ "$ok" != "1" ]]; then
+        echo -e "${RED}[错误] 写入数据库失败，请检查上方错误信息${NC}" >&2
+        return 1
+    fi
+
+    # ③ 重启服务使新 Token 生效（getAdminToken 每次读 DB/env，重启确保干净）
+    if [[ -n "${SRC_DIR:-}" && -d "$SRC_DIR/server" ]]; then
+        ( cd "$SRC_DIR/server" && docker compose restart 2>/dev/null ) || true
+    fi
+
+    echo ""
+    echo -e "${GREEN}[OK]   新管理员 Token 已生成${NC}"
+    echo ""
+    echo "  $new_token"
+    echo ""
+    echo -e "${YELLOW}[重要] 请立即保存！旧 Token 已失效，需用新 Token 登录。${NC}"
+}
+
 uninstall_all() {
     echo "== 卸载受控端 =="
     if [[ -f /opt/simple-probe/uninstall.sh ]]; then
@@ -912,6 +995,7 @@ while [[ $# -gt 0 ]]; do
         --restore)        A_RESTORE_PATH="$2"; ACTION="restore"; shift 2 ;;
         --backup-list)    ACTION="backup-list"; shift ;;
         --db-stats)       ACTION="db-stats"; shift ;;
+        --reset-admin-token) ACTION="reset-admin-token"; shift ;;
         --server)      A_SERVER="$2"; shift 2 ;;
         --id)          A_ID="$2"; shift 2 ;;
         --token)       A_TOKEN="$2"; shift 2 ;;
@@ -944,6 +1028,7 @@ if [[ -n "$ACTION" ]]; then
         restore)      do_restore "${A_RESTORE_PATH:-}" ;;
         backup-list)  do_backup_list ;;
         db-stats)     do_db_stats ;;
+        reset-admin-token) do_reset_admin_token ;;
     esac
 elif [[ -t 0 ]]; then
     while true; do show_menu; done

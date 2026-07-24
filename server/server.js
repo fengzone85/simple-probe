@@ -9,6 +9,20 @@ const alerts = require('./src/alerts');
 const { safeEqual, ipWhitelist } = require('./src/auth');
 const { sanitizeCss } = require('./src/validate');
 
+// 读取版本号与构建时间（install.sh 部署时写入 _build_time，版本来自 package.json）
+const APP_VERSION = (() => {
+  try { return require('./package.json').version || '1.0.0'; } catch (e) { return '1.0.0'; }
+})();
+const APP_BUILD_TIME = (() => {
+  try {
+    const pkg = require('./package.json');
+    if (pkg._build_time && pkg._build_time !== 'BUILD_TIME_PLACEHOLDER') return pkg._build_time;
+  } catch (e) {}
+  // 回退：读取构建时间文件（install.sh 生成）
+  try { return fs.readFileSync(path.join(__dirname, 'build_time.txt'), 'utf-8').trim(); } catch (e) {}
+  return 'unknown';
+})();
+
 const app = express();
 // 信任前置反代（Nginx）的 X-Forwarded-*，使 req.ip 取到真实客户端 IP，
 // 供应用层限流按客户端区分（而非全部归到 127.0.0.1）。Nginx 已设置 X-Forwarded-For。
@@ -143,6 +157,21 @@ app.get('/themes/:id/:file', (req, res) => {
   res.setHeader('Content-Type', THEME_MIME[ext] || 'application/octet-stream');
   fs.createReadStream(fp).pipe(res);
 });
+
+// 版本信息端点（公开）：供前端页脚显示版本号与构建时间
+app.get('/api/version', (req, res) => {
+  res.json({ version: APP_VERSION, build_time: APP_BUILD_TIME });
+});
+
+// 独立初始化页面（/setup.html）：仅在未初始化时可访问，已初始化则重定向到 /admin.html
+app.get('/setup.html', (req, res) => {
+  const { getAdminToken } = require('./src/auth');
+  if (getAdminToken()) {
+    return res.redirect(302, '/admin.html');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'setup.html'));
+});
+app.get('/setup', (req, res) => res.redirect(302, '/setup.html'));
 
 app.get('/', (req, res, next) => {
   // 支持 ?theme=<id> 预览（无需改动设置，便于调试第三方皮肤）；否则用后台设置的 public_theme。

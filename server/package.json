@@ -14,5 +14,6 @@
     "express": "^4.21.0",
     "nodemailer": "^9.0.3",
     "ws": "^8.18.0"
-  }
+  },
+  "_build_time": "BUILD_TIME_PLACEHOLDER"
 }

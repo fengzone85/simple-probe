@@ -89,24 +89,6 @@ function showLogin(need) {
   showLoginPage();
   toast('登录已过期，请重新登录' + (need ? '（需要动态码）' : ''));
 }
-// ---- 首次部署初始化向导 ----
-function showSetupPage() {
-  const app = $('app'); if (app) app.hidden = true;
-  const lp = $('loginPage'); if (lp) lp.style.display = 'none';
-  const sp = $('setupPage'); if (sp) sp.style.display = 'flex';
-}
-async function generateSetup() {
-  const btn = $('btnSetupGenerate'); btn.disabled = true; btn.textContent = '生成中…';
-  $('setupErr').textContent = '';
-  try {
-    const r = await fetch('/api/setup/generate', { method: 'POST' });
-    const j = await r.json();
-    if (r.status !== 200) { $('setupErr').textContent = j.error || '生成失败'; btn.disabled = false; btn.textContent = '生成管理员 Token'; return; }
-    $('setupTokenDisplay').textContent = j.token;
-    $('setupResult').style.display = '';
-    btn.style.display = 'none';
-  } catch (e) { $('setupErr').textContent = '生成失败：' + (e.message || e); btn.disabled = false; btn.textContent = '生成管理员 Token'; }
-}
 // ---- 设置中心：加载并应用 ----
 async function loadAppSettings() {
   try {
@@ -1105,8 +1087,6 @@ function bindEvents() {
   $('btnLoginSubmit').addEventListener('click', doLogin);
   $('loginToken').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('loginTotp').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
-  $('btnSetupGenerate').addEventListener('click', generateSetup);
-  $('btnSetupLogin').addEventListener('click', () => { $('setupPage').style.display = 'none'; showLoginPage(); $('loginToken').focus(); });
   $('btnLogout').addEventListener('click', doLogout);
   $('btnTestAlert').addEventListener('click', sendTestAlert);
   $('navSecurity').addEventListener('click', () => openModal('securityModal'));
@@ -1200,14 +1180,18 @@ load2FAStatus();
 initLoad();
 
 async function initLoad() {
-  try {
-    const sr = await fetch('/api/setup/status');
-    const sj = await sr.json();
-    if (sj.needs_setup) { showSetupPage(); return; }
-  } catch (e) {}
+  // 已登录态（Cookie）→ 直接进入仪表盘
   try {
     const r = await fetch('/api/admin/2fa/status', { credentials: 'same-origin' });
     if (r.status === 200) { const st = await r.json(); totpRequired = !!st.enabled; enterApp(); setView('dashboard'); return; }
+  } catch (e) {}
+  // 未登录：按初始化状态分流——未初始化跳独立 setup.html 初始化向导；已初始化显示登录页。
+  // 注意不能无条件跳 /setup.html：已初始化时 /setup.html 会 302 回 /admin.html，
+  // 否则形成 /admin.html ⇄ /setup.html 死循环，已初始化用户永远看不到登录页。
+  try {
+    const sr = await fetch('/api/setup/status');
+    const sj = await sr.json();
+    if (sj.needs_setup) { location.href = '/setup.html'; return; }
   } catch (e) {}
   showLoginPage();
 }

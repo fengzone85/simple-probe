@@ -96,18 +96,27 @@ const setupRateLimit = (req, res, next) => {
   if (rec.count > SETUP_MAX) return res.status(429).json({ error: 'too many requests' });
   next();
 };
+// 初始化端点：仅在「无任何有效 Token」时可用。一旦生成本端点永久失效（返回 410 Gone），
+// 后续重置 Token 只能通过 SSH 运行 install.sh --reset-admin-token，彻底杜绝 Web 重置风险。
 router.post('/setup/generate', setupRateLimit, (req, res) => {
-  // 若已通过 .env 配置有效 ADMIN_TOKEN，本向导生成的 token 会被 env 静默覆盖、永远无法登录，
-  // 属于误导。直接拒绝并提示改用 .env 的 token，避免生成无用的 adm_ token（UX 陷阱修复）。
-  if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) {
-    return res.status(400).json({ error: '已通过 .env 配置 ADMIN_TOKEN，请直接用 .env 中的 token 登录；本向导仅在未配置 .env 时生效。', envConfigured: true });
+  // 防护①：任何有效 Token 存在（env / DB / 旧文件）一律拒绝，返回 410 Gone
+  if (getAdminToken()) {
+    return res.status(410).json({
+      error: 'already initialized',
+      message: '管理员 Token 已存在，本端点已永久禁用。重置 Token 请通过 SSH 运行：sudo bash install.sh --reset-admin-token'
+    });
   }
-  // 原子写入：仅当未初始化时落库，并发请求中只有一个成功，其余返回 400，杜绝 Token 抢注竞态。
+  // ② 通过 .env 配置有效 ADMIN_TOKEN 后，.env token 优先于 DB → 上面 getAdminToken() 已返回非空，同样 410。
+  // ③ 原子写入：仅当未初始化时落库，并发请求中只有一个成功，其余返回 400，杜绝 Token 抢注竞态。
   const token = 'adm_' + crypto.randomBytes(16).toString('hex');
   if (!db.setConfigIfAbsent('admin_token_raw', token)) {
-    return res.status(400).json({ error: 'already initialized' });
+    // 竞态：另一个请求已写入 → 重新检查，如已有 token 则 410
+    return res.status(410).json({
+      error: 'already initialized',
+      message: '管理员 Token 已由其他请求生成，本端点已永久禁用。'
+    });
   }
-  console.log('[setup] 管理员 Token 已生成并保存到 DB');
+  console.log('[setup] 管理员 Token 已生成并保存到 DB，此后 /api/setup/generate 永久禁用');
   res.json({ token });
 });
 

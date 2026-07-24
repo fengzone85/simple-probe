@@ -253,7 +253,7 @@ function ip6ToBits(ip) {
 
 module.exports = {
   agentAuth, adminAuth, adminOrReadonly, adminOnly, requireAdmin, ipWhitelist, requireProto,
-  safeEqual, signSession, verifySession, getSession,
+  safeEqual, signSession, verifySession, getSession, getAdminToken,
   setSessionCookie, clearSessionCookie, COOKIE_NAME, SESSION_TTL,
   verifyTotpHeader,
 };
