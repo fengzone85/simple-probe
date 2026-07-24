@@ -86,8 +86,14 @@ def disk_list(root='/'):
         mounts_path = '/proc/mounts'
         prefix = ''
     else:
-        mounts_path = os.path.join(root, 'proc', 'mounts')
+        # Docker 形态（root='/host'）：宿主 /proc 必须通过 `-v /proc:/hostproc:ro`
+        # 单独挂入。因为对 '/' 的递归 bind 会把「容器自身」的 proc 带进 /host/proc，
+        # 直接读 /host/proc/mounts 会拿到容器挂载表（含 overlay 根、/etc/hosts 等伪盘），
+        # 而非真实宿主磁盘。故优先使用独立的 /hostproc/mounts。
         prefix = root.rstrip('/')
+        mounts_path = os.path.join(root, 'proc', 'mounts')
+        if prefix == '/host' and os.path.exists('/hostproc/mounts'):
+            mounts_path = '/hostproc/mounts'
     if not os.path.exists(mounts_path):
         mounts_path = '/proc/mounts'
         prefix = ''
@@ -103,6 +109,13 @@ def disk_list(root='/'):
                 if fstype not in REAL_FS:
                     continue
                 p = mount if not prefix else (prefix + '/' + mount.lstrip('/'))
+                # 跳过文件型挂载点（docker 注入的 /etc/hosts、/etc/resolv.conf 等伪盘，
+                # 它们不是真实磁盘，且 st_dev 与根盘不同会被误判为独立盘）。
+                try:
+                    if not os.path.isdir(p):
+                        continue
+                except Exception:
+                    continue
                 try:
                     st = os.statvfs(p)
                     fsdev = os.stat(p).st_dev
@@ -292,7 +305,7 @@ def probe_one(host, port=443, timeout=2.5, retries=3):
                 s = (out.stdout or '') + (out.stderr or '')
                 m = re.search(r'平均\s*=\s*([\d.,]+)\s*ms', s)            # Windows
                 if not m:
-                    m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+/[\d.]+\s*ms', s)  # Linux avg
+                    m = re.search(r'=\s*[\d.]+/([\d.]+)/[\d.]+/[\d.]+\s*ms', s)  # Linux avg(min/avg/max/mdev)
                 if m:
                     return round(float(m.group(1).replace(',', '.')), 1), True
                 # ICMP 通但 RTT 解析失败（个别系统输出格式差异）仍判可达，

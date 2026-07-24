@@ -47,7 +47,7 @@ def send(payload, attempt=0):
     data = json.dumps(payload).encode('utf-8')
     req = urllib.request.Request(REPORT_URL, data=data, method='POST')
     req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', 'Mozilla/5.0 (compatible; simple-probe/1.0)')
+    req.add_header('User-Agent', 'simple-probe-agent/1.0')
     req.add_header('X-Agent-ID', AGENT_ID)
     req.add_header('Authorization', 'Bearer ' + AGENT_TOKEN)
     try:

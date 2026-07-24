@@ -3,6 +3,13 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY agent.py collector.py ./
 
+# 安装 ping，使网络质量自测可用 ICMP（默认仅 TCP 443/80/53 回退；
+# 部分运营商 DNS/探测点未开放这些端口，会被误判为"不可达"，如移动 211.136.192.6）。
+# 默认容器能力已含 CAP_NET_RAW，ping 的 raw socket 可正常工作。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
 # 运行环境变量（由 docker run -e 注入；默认值仅作占位，启动前必须设置）
 ENV SERVER_URL="" \
     AGENT_ID="" \

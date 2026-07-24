@@ -195,7 +195,7 @@ payload = {"setup_token": token}
 if name:
     payload["name"] = name
 data = json.dumps(payload).encode()
-req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", "User-Agent": "simple-probe-agent/1.0"}, method="POST")
 try:
     with urllib.request.urlopen(req, timeout=15) as r:
         body = json.loads(r.read().decode())
@@ -227,7 +227,7 @@ if [[ -z "${SERVER_URL:-}" ]]; then
     echo "━━━ Simple Probe Agent 安装配置 ━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo -n "服务端地址 (SERVER_URL)  [例如 https://your-server:8008]: "
-    read -r SERVER_URL
+    read -r SERVER_URL || exit 0
 fi
 
 if [[ -z "${SERVER_URL}" ]]; then
@@ -238,7 +238,7 @@ fi
 if [[ -z "${AGENT_ID:-}" ]]; then
     echo ""
     echo -n "节点 ID (AGENT_ID): "
-    read -r AGENT_ID
+    read -r AGENT_ID || exit 0
 fi
 
 if [[ -z "${AGENT_ID}" ]]; then
@@ -249,7 +249,7 @@ fi
 if [[ -z "${AGENT_TOKEN:-}" ]]; then
     echo ""
     echo -n "认证令牌 (AGENT_TOKEN): "
-    read -rs AGENT_TOKEN
+    read -rs AGENT_TOKEN || exit 0
     echo ""
 fi
 
