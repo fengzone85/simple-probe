@@ -71,6 +71,12 @@ Simple Probe 一键部署脚本
   sudo bash install.sh --status
   sudo bash install.sh --uninstall
 
+  # 数据库备份 / 恢复 / 管理
+  sudo bash install.sh --backup [输出路径]         # 备份数据库（默认存到 $DB_BACKUP_DIR）
+  sudo bash install.sh --restore <备份文件路径>    # 从备份恢复（自动先备份当前状态）
+  sudo bash install.sh --backup-list               # 列出已有备份
+  sudo bash install.sh --db-stats                  # 查看数据库统计（大小/记录数/时间范围）
+
 选项：
   --install-server        安装服务端（Docker）
   --install-agent         安装受控端（systemd）
@@ -79,6 +85,10 @@ Simple Probe 一键部署脚本
   --update-agent          更新受控端（systemd，保留原连接配置）
   --status                查看服务端/受控端状态
   --uninstall             卸载服务端与受控端
+  --backup [路径]         备份数据库（不指定路径则存到 /var/backups/simple-probe/）
+  --restore <路径>        从备份恢复数据库（恢复前自动备份当前状态）
+  --backup-list           列出已有备份
+  --db-stats              查看数据库统计信息
   --server URL            SERVER_URL
   --id / --token          节点 ID 与令牌（手动模式）
   --token-file FILE       从文件读取令牌（推荐，避免明文暴露）
@@ -540,6 +550,299 @@ status_all() {
     fi
 }
 
+# ── 数据库备份 / 恢复 / 管理 ─────────────────────────────────────────────────
+# 服务端数据库路径：Docker 部署在命名卷 server-data 内（容器内 /data/monitor.db）；
+# 原生/开发态在 $SRC_DIR/server/data/monitor.db。
+# 备份原则：SQLite 单文件即全量，但必须通过 .backup 命令或停服后 cp，避免写坏。
+DB_BACKUP_DIR="/var/backups/simple-probe"
+
+# 定位数据库：返回「容器名:容器内路径」或「宿主机文件路径」；找不到则返回空。
+locate_db() {
+    # 优先：Docker 命名卷（server-data）
+    local vol="server-data"
+    docker volume inspect "$vol" >/dev/null 2>&1 || vol=""
+    if [[ -n "$vol" ]]; then
+        # 找挂载该卷且当前运行中的容器（compose 项目名不确定，按卷反查容器）
+        local cid
+        cid="$(docker ps -q --filter "volume=$vol" 2>/dev/null | head -n1)"
+        if [[ -n "$cid" ]]; then
+            # 取 compose 服务名（默认 server）
+            local svc
+            svc="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$cid" 2>/dev/null)"
+            svc="${svc:-server}"
+            echo "docker:${cid}:${svc}:/data/monitor.db"
+            return
+        fi
+        # 卷存在但容器未运行：回退到 docker run --rm 临时挂载拷贝
+        echo "volume:$vol"
+        return
+    fi
+    # 回退：宿主机本地文件
+    if [[ -f "$SRC_DIR/server/data/monitor.db" ]]; then
+        echo "file:$SRC_DIR/server/data/monitor.db"
+        return
+    fi
+    echo ""
+}
+
+# 备份数据库：通过 docker exec 调用 sqlite3 .backup 保证一致性（WAL 检查点 +
+# 事务合并到主库），不依赖停服；无 sqlite3 时回退到 cp（需先停容器防写坏）。
+do_backup() {
+    local out_path="${1:-}"
+    ensure_docker || return 1
+    local loc; loc="$(locate_db)"
+    if [[ -z "$loc" ]]; then
+        echo -e "${RED}[错误] 无法定位数据库，确认服务端已安装且卷/文件存在${NC}" >&2
+        return 1
+    fi
+
+    mkdir -p "$DB_BACKUP_DIR"
+    local ts; ts="$(date +%Y%m%d_%H%M%S)"
+    [[ -z "$out_path" ]] && out_path="$DB_BACKUP_DIR/monitor_${ts}.db"
+
+    if [[ "$loc" == docker:* ]]; then
+        # 格式 docker:cid:svc:path — 容器内拷贝
+        local cid svc cpath
+        cid="$(echo "$loc" | cut -d: -f2)"
+        svc="$(echo "$loc" | cut -d: -f3)"
+        cpath="$(echo "$loc" | cut -d: -f4)"
+        # 优先用 sqlite3 .backup（一致性最好）；无 sqlite3 则 cp 读
+        if docker exec "$cid" sh -c 'command -v sqlite3 >/dev/null 2>&1' 2>/dev/null; then
+            echo -e "${YELLOW}[信息] 通过 sqlite3 .backup 热备份（不中断服务）…${NC}"
+            docker exec "$cid" sqlite3 "$cpath" ".backup '${cpath}.bak'" >/dev/null 2>&1 \
+              || {
+                  # 兜底：容器内 cp（若 .backup 因权限失败）
+                  docker exec "$cid" cp "$cpath" "${cpath}.bak" 2>/dev/null || true
+              }
+            docker cp "${cid}:${cpath}.bak" "$out_path"
+            docker exec "$cid" rm -f "${cpath}.bak" 2>/dev/null || true
+        else
+            echo -e "${YELLOW}[信息] 容器无 sqlite3，直接 cp 拷贝…${NC}"
+            docker cp "${cid}:${cpath}" "$out_path"
+        fi
+    elif [[ "$loc" == volume:* ]]; then
+        # 卷存在但容器未运行：启动临时容器挂载卷并拷贝
+        local vol; vol="$(echo "$loc" | cut -d: -f2)"
+        echo -e "${YELLOW}[信息] 容器未运行，通过临时容器挂载卷拷贝…${NC}"
+        docker run --rm -v "$vol":/data -v "$DB_BACKUP_DIR":/out \
+            alpine:3.20 cp /data/monitor.db "/out/$(basename "$out_path")" 2>/dev/null
+    else
+        # 宿主机文件：需先 flush，直接 cp（SQLite 单文件）
+        local fpath; fpath="$(echo "$loc" | cut -d: -f2)"
+        echo -e "${YELLOW}[信息] 复制宿主机数据库文件…${NC}"
+        cp "$fpath" "$out_path"
+    fi
+
+    if [[ -f "$out_path" ]]; then
+        local sz; sz="$(du -h "$out_path" | cut -f1)"
+        echo -e "${GREEN}[OK]   备份完成: ${out_path} (${sz})${NC}"
+        echo -e "${YELLOW}[提示] 备份包含全部监控数据、Agent 记录、设置；请妥善保管${NC}"
+    else
+        echo -e "${RED}[错误] 备份失败，请检查磁盘空间与权限${NC}" >&2
+        return 1
+    fi
+}
+
+# 恢复数据库：校验 → 自动备份当前 → 原子替换 → 重启服务
+do_restore() {
+    local in_path="$1"
+    [[ -z "$in_path" ]] && { echo -e "${RED}[错误] 用法: --restore <备份文件路径>${NC}" >&2; return 1; }
+    [[ -f "$in_path" ]] || { echo -e "${RED}[错误] 文件不存在: $in_path${NC}" >&2; return 1; }
+    ensure_docker || return 1
+
+    # ── 校验：SQLite 完整性 + 魔数 ──────────────────────────────────────────
+    local magic
+    magic="$(head -c 16 "$in_path" 2>/dev/null)"
+    if [[ "$magic" != "SQLite format 3"* ]]; then
+        echo -e "${RED}[错误] 文件不是合法的 SQLite 数据库${NC}" >&2
+        return 1
+    fi
+    # 有 sqlite3 时做 integrity_check
+    if command -v sqlite3 >/dev/null 2>&1; then
+        if ! sqlite3 "$in_path" "PRAGMA integrity_check;" 2>/dev/null | grep -qx "ok"; then
+            echo -e "${RED}[错误] 备份文件完整性校验未通过，已放弃恢复${NC}" >&2
+            return 1
+        fi
+        echo -e "${GREEN}[OK]   备份文件完整性校验通过${NC}"
+    else
+        echo -e "${YELLOW}[警告] 宿主机无 sqlite3，跳过完整性校验（仅校验了魔数）${NC}"
+    fi
+
+    local loc; loc="$(locate_db)"
+    if [[ -z "$loc" ]]; then
+        echo -e "${RED}[错误] 无法定位当前数据库，确认服务端已安装${NC}" >&2
+        return 1
+    fi
+
+    echo ""
+    echo -e "${YELLOW}[警告] 恢复将覆盖当前全部数据！恢复前会自动备份当前状态。${NC}"
+    read -r -p "确认恢复？输入 yes 继续: " confirm || { echo "已取消"; return 0; }
+    [[ "$confirm" == "yes" ]] || { echo "已取消"; return 0; }
+
+    # ── 恢复前自动备份（后悔药）──────────────────────────────────────────────
+    echo -e "${YELLOW}[信息] 自动备份当前数据库（恢复失败可回滚）…${NC}"
+    local pre_restore; pre_restore="$DB_BACKUP_DIR/pre_restore_$(date +%Y%m%d_%H%M%S).db"
+    # 临时关闭 errexit，允许备份失败时继续（当前库可能已坏）
+    set +e
+    do_backup "$pre_restore" 2>/dev/null
+    set -e
+    if [[ -f "$pre_restore" ]]; then
+        echo -e "${GREEN}[OK]   已保存当前状态: ${pre_restore}${NC}"
+    else
+        echo -e "${YELLOW}[警告] 当前数据库备份失败（可能已损坏），仍继续恢复${NC}"
+    fi
+
+    # ── 原子替换 ────────────────────────────────────────────────────────────
+    if [[ "$loc" == docker:* ]]; then
+        local cid svc cpath
+        cid="$(echo "$loc" | cut -d: -f2)"
+        svc="$(echo "$loc" | cut -d: -f3)"
+        cpath="$(echo "$loc" | cut -d: -f4)"
+        echo -e "${YELLOW}[信息] 停止服务端容器以安全替换数据库…${NC}"
+        docker stop "$cid" >/dev/null 2>&1 || true
+        cp "$in_path" "${in_path}.tmp"
+        docker cp "${in_path}.tmp" "${cid}:${cpath}" 2>/dev/null
+        rm -f "${in_path}.tmp"
+        echo -e "${YELLOW}[信息] 重启服务端…${NC}"
+        docker start "$cid" >/dev/null 2>&1 || true
+        # compose 管理的容器用 restart 更稳妥
+        local proj; proj="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$cid" 2>/dev/null)"
+        if [[ -n "$proj" && -n "${SRC_DIR:-}" && -d "$SRC_DIR/server" ]]; then
+            ( cd "$SRC_DIR/server" && docker compose up -d "$svc" 2>/dev/null ) || docker start "$cid" >/dev/null 2>&1 || true
+        fi
+    elif [[ "$loc" == volume:* ]]; then
+        local vol; vol="$(echo "$loc" | cut -d: -f2)"
+        echo -e "${YELLOW}[信息] 通过临时容器写入卷…${NC}"
+        docker run --rm -v "$vol":/data -v "$(dirname "$in_path")":/in \
+            alpine:3.20 cp "/in/$(basename "$in_path")" /data/monitor.db 2>/dev/null
+    else
+        local fpath; fpath="$(echo "$loc" | cut -d: -f2)"
+        echo -e "${YELLOW}[信息] 替换宿主机数据库文件…${NC}"
+        # 停服
+        if [[ -n "${SRC_DIR:-}" && -d "$SRC_DIR/server" ]]; then
+            ( cd "$SRC_DIR/server" && docker compose down 2>/dev/null ) || true
+        fi
+        cp "$fpath" "${fpath}.before_restore.bak"
+        cp "$in_path" "$fpath"
+        # 重启
+        if [[ -n "${SRC_DIR:-}" && -d "$SRC_DIR/server" ]]; then
+            ( cd "$SRC_DIR/server" && docker compose up -d 2>/dev/null ) || true
+        fi
+    fi
+
+    echo -e "${GREEN}[OK]   数据库已恢复${NC}"
+    echo -e "${YELLOW}[提示] 请刷新后台确认数据正确；如有问题可从 ${pre_restore:-（无）} 回滚${NC}"
+}
+
+# 列出已有备份
+do_backup_list() {
+    echo "== 数据库备份列表 =="
+    if [[ ! -d "$DB_BACKUP_DIR" ]]; then
+        echo "  暂无备份（目录 $DB_BACKUP_DIR 不存在）"
+        echo -e "  ${YELLOW}首次备份: sudo bash install.sh --backup${NC}"
+        return
+    fi
+    local count=0
+    ls -lhS "$DB_BACKUP_DIR"/*.db 2>/dev/null | while read -r line; do
+        echo "  $line"
+        count=$((count+1))
+    done
+    local total; total="$(ls "$DB_BACKUP_DIR"/*.db 2>/dev/null | wc -l)"
+    if [[ $total -eq 0 ]]; then
+        echo "  暂无备份文件"
+        echo -e "  ${YELLOW}首次备份: sudo bash install.sh --backup${NC}"
+    else
+        echo -e "  共 ${total} 个备份  |  目录: $DB_BACKUP_DIR"
+        echo -e "  ${YELLOW}恢复: sudo bash install.sh --restore $DB_BACKUP_DIR/<文件名>${NC}"
+    fi
+}
+
+# 数据库统计信息
+do_db_stats() {
+    echo "== 数据库统计 =="
+    ensure_deps || return 1
+    ensure_docker || return 1
+    local loc; loc="$(locate_db)"
+    if [[ -z "$loc" ]]; then
+        echo -e "${RED}[错误] 无法定位数据库${NC}" >&2
+        return 1
+    fi
+
+    local sqlite_cmd="sqlite3"
+    local db_arg="$loc"
+    if [[ "$loc" == docker:* ]]; then
+        local cid cpath
+        cid="$(echo "$loc" | cut -d: -f2)"
+        cpath="$(echo "$loc" | cut -d: -f4)"
+        # 容器内无 sqlite3 时用宿主机临时拷贝
+        if ! docker exec "$cid" sh -c 'command -v sqlite3 >/dev/null 2>&1' 2>/dev/null; then
+            echo -e "${YELLOW}[信息] 容器无 sqlite3，临时导出统计…${NC}"
+            local tmp; tmp="$(mktemp)"
+            docker cp "${cid}:${cpath}" "$tmp" 2>/dev/null
+            sqlite_cmd="sqlite3"
+            db_arg="$tmp"
+        else
+            echo -e "${YELLOW}[信息] 通过容器内 sqlite3 查询统计…${NC}"
+            docker exec "$cid" sqlite3 "$cpath" <<'SQL'
+SELECT '文件大小: ' || printf('%.2f MB', length(hex(a))/2.0/1048576) FROM (SELECT hex(randomblob(1)) a);
+SQL
+            sqlite_cmd="docker exec $cid sqlite3 $cpath"
+            db_arg=""
+        fi
+    elif [[ "$loc" == volume:* ]]; then
+        local vol; vol="$(echo "$loc" | cut -d: -f2)"
+        local tmp; tmp="$(mktemp)"
+        docker run --rm -v "$vol":/data alpine:3.20 cp /data/monitor.db "$tmp" 2>/dev/null
+        db_arg="$tmp"
+    else
+        db_arg="$(echo "$loc" | cut -d: -f2)"
+    fi
+
+    if [[ -n "$db_arg" && -f "$db_arg" ]]; then
+        echo "  路径: $db_arg"
+        local sz; sz="$(du -h "$db_arg" | cut -f1)"
+        echo "  文件大小: $sz"
+        echo ""
+        echo "  ── 表统计 ──"
+        $sqlite_cmd "$db_arg" "SELECT 'agents（客户端）: ' || COUNT(*) || ' 条' FROM agents;" 2>/dev/null
+        $sqlite_cmd "$db_arg" "SELECT 'metrics（指标）: ' || COUNT(*) || ' 条' FROM metrics;" 2>/dev/null
+        $sqlite_cmd "$db_arg" "SELECT '  最早: ' || datetime(MIN(ts)/1000, 'unixepoch', 'localtime') FROM metrics;" 2>/dev/null
+        $sqlite_cmd "$db_arg" "SELECT '  最新: ' || datetime(MAX(ts)/1000, 'unixepoch', 'localtime') FROM metrics;" 2>/dev/null
+        $sqlite_cmd "$db_arg" "SELECT 'admin_config（配置项）: ' || COUNT(*) || ' 条' FROM admin_config;" 2>/dev/null
+        $sqlite_cmd "$db_arg" "SELECT 'alert_state（告警状态）: ' || COUNT(*) || ' 条' FROM alert_state;" 2>/dev/null
+        echo ""
+        echo "  ── 占用明细 ──"
+        $sqlite_cmd "$db_arg" "SELECT name, printf('%.1f MB', pgsize/1048576.0) FROM dbstat WHERE name IN ('agents','metrics','admin_config','alert_state') GROUP BY name;" 2>/dev/null \
+            || $sqlite_cmd "$db_arg" "SELECT 'metrics 表: ' || printf('%.1f MB', SUM(pgsize)/1048576.0) FROM dbstat WHERE name='metrics';" 2>/dev/null
+    fi
+    # 清理临时文件
+    [[ -n "${tmp:-}" && -f "${tmp:-}" ]] && rm -f "$tmp"
+}
+
+# ── 数据库管理子菜单（交互模式）─────────────────────────────────────────────────
+db_manage_menu() {
+    echo ""
+    echo -e "${BLUE}━━━ 数据库管理 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  1) 备份数据库"
+    echo "  2) 从备份恢复"
+    echo "  3) 查看备份列表"
+    echo "  4) 查看数据库统计"
+    echo "  0) 返回主菜单"
+    echo ""
+    read -r -p "请选择 [0-4]: " c || exit 0
+    case "$c" in
+        1) do_backup "" ;;
+        2)
+            local bkp; read -r -p "备份文件路径: " bkp || return
+            [[ -n "$bkp" ]] && do_restore "$bkp" || echo "已取消"
+            ;;
+        3) do_backup_list ;;
+        4) do_db_stats ;;
+        *) return ;;
+    esac
+}
+
 uninstall_all() {
     echo "== 卸载受控端 =="
     if [[ -f /opt/simple-probe/uninstall.sh ]]; then
@@ -577,9 +880,11 @@ show_menu() {
     echo "  5) 更新服务端 (拉取最新 + 重建)"
     echo "  6) 查看状态"
     echo "  7) 卸载"
+    echo "  8) 数据库管理（备份/恢复/统计）"
     echo "  0) 退出"
     echo ""
-    read -r -p "请选择 [0-7]: " c
+    # L-3 修复：read 遇 EOF（Ctrl+D / 管道关闭）时返回非零，set -euo pipefail 会异常退出；加 || exit 0 让 EOF 优雅退出
+    read -r -p "请选择 [0-8]: " c || exit 0
     case "$c" in
         1) install_server ;;
         2) install_agent ;;
@@ -588,6 +893,7 @@ show_menu() {
         5) update_server ;;
         6) status_all ;;
         7) uninstall_all ;;
+        8) db_manage_menu ;;
         *) echo "退出"; exit 0 ;;
     esac
 }
@@ -602,6 +908,10 @@ while [[ $# -gt 0 ]]; do
         --update-agent)   ACTION="update-agent"; shift ;;
         --status)         ACTION="status"; shift ;;
         --uninstall)      ACTION="uninstall"; shift ;;
+        --backup)         ACTION="backup"; shift ;;
+        --restore)        A_RESTORE_PATH="$2"; ACTION="restore"; shift 2 ;;
+        --backup-list)    ACTION="backup-list"; shift ;;
+        --db-stats)       ACTION="db-stats"; shift ;;
         --server)      A_SERVER="$2"; shift 2 ;;
         --id)          A_ID="$2"; shift 2 ;;
         --token)       A_TOKEN="$2"; shift 2 ;;
@@ -623,13 +933,17 @@ fi
 
 if [[ -n "$ACTION" ]]; then
     case "$ACTION" in
-        server)    install_server ;;
-        agent)     install_agent ;;
+        server)       install_server ;;
+        agent)        install_agent ;;
         update-script) update_script ;;
         update-server) update_server ;;
         update-agent)  update_agent ;;
-        status)    status_all ;;
-        uninstall) uninstall_all ;;
+        status)       status_all ;;
+        uninstall)    uninstall_all ;;
+        backup)       do_backup "" ;;
+        restore)      do_restore "${A_RESTORE_PATH:-}" ;;
+        backup-list)  do_backup_list ;;
+        db-stats)     do_db_stats ;;
     esac
 elif [[ -t 0 ]]; then
     while true; do show_menu; done
