@@ -108,7 +108,18 @@ def disk_list(root='/'):
                 dev, mount, fstype = parts[0], parts[1], parts[2]
                 if fstype not in REAL_FS:
                     continue
-                p = mount if not prefix else (prefix + '/' + mount.lstrip('/'))
+                # Docker 形态（prefix='/host'）：/hostproc/mounts 实为容器 mount 命名空间视图，
+                # 宿主真实盘以 /host 前缀出现（如 /host、/host/data），而容器自身挂载
+                # （docker 卷 /data、/etc/hosts 等）不带 /host 前缀。仅保留带 /host 前缀的
+                # 条目，统计用 mount 本身（bind 可达），展示时去掉 /host 前缀还原为宿主路径。
+                if prefix == '/host':
+                    if not (mount == '/host' or mount.startswith('/host/')):
+                        continue
+                    p = mount
+                    disp_mount = mount[len('/host'):] or '/'
+                else:
+                    p = mount if not prefix else (prefix + '/' + mount.lstrip('/'))
+                    disp_mount = mount
                 # 跳过文件型挂载点（docker 注入的 /etc/hosts、/etc/resolv.conf 等伪盘，
                 # 它们不是真实磁盘，且 st_dev 与根盘不同会被误判为独立盘）。
                 try:
@@ -125,7 +136,7 @@ def disk_list(root='/'):
                 free = st.f_bfree * st.f_frsize
                 used = max(0, total - free)
                 pct = (used / total * 100.0) if total else 0.0
-                cands.append({'mount': mount, 'used': used, 'total': total,
+                cands.append({'mount': disp_mount, 'used': used, 'total': total,
                               'pct': round(pct, 2), 'dev': fsdev})
     except Exception:
         pass
