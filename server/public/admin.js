@@ -133,7 +133,7 @@ function applyCustomCss() {
   link.href = '/custom.css?t=' + Date.now();
 }
 function applySiteTitle() {
-  const t = appSettings.site_title || '自托管监控';
+  const t = appSettings.site_title || 'Simple Probe';
   document.title = t + ' · Host Monitor';
   if ($('siteTitle')) $('siteTitle').innerHTML = '🛰️ ' + esc(t) + '<span class="dot">.</span>';
   if ($('loginTitle')) $('loginTitle').textContent = t;

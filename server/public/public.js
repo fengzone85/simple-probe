@@ -102,7 +102,7 @@ async function initPublic() {
   const enabled = !!(meta && meta.public_enabled);
   publicServerOrder = (meta && Array.isArray(meta.agent_order)) ? meta.agent_order : [];
   try { const lo = JSON.parse(localStorage.getItem('pv_order') || '[]'); if (Array.isArray(lo)) localOrder = lo; } catch (e) {}
-  const title = (meta && meta.site_title) || '自托管监控';
+  const title = (meta && meta.site_title) || 'Simple Probe';
   if ($('pvTitle')) $('pvTitle').textContent = title;
   // 「进入后台」链接统一走「项目网址」（套盾公网），避免暴露 Agent 直连地址
   const $pa = $('pvAdmin');

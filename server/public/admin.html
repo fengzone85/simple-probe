@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>自托管监控 · Host Monitor</title>
+  <title>Simple Probe · Host Monitor</title>
   <link rel="stylesheet" href="style.css?v=12" />
   <link id="customCssLink" rel="stylesheet" href="/custom.css" />
   <script src="vendor/echarts.min.js"></script>
@@ -13,7 +13,7 @@
   <div id="loginPage" class="login-page">
     <div class="login-card">
       <div class="login-logo">🛰️</div>
-      <h1 id="loginTitle">自托管监控</h1>
+      <h1 id="loginTitle">Simple Probe</h1>
       <p class="login-sub" id="loginSub">请输入管理员 Token 登录</p>
       <div class="field"><input id="loginToken" type="password" placeholder="管理员 Token" autocomplete="off" /></div>
       <div class="field" id="loginTotpField" style="display:none"><input id="loginTotp" inputmode="numeric" placeholder="动态码 (TOTP)" autocomplete="off" /></div>
@@ -43,7 +43,7 @@
   <div id="app" hidden>
     <!-- 左侧栏导航（对标 Komari） -->
     <aside class="sidebar">
-      <div class="side-brand"><span class="sb-logo">🛰️</span><span class="sb-name" id="siteTitleSide">自托管监控</span></div>
+      <div class="side-brand"><span class="sb-logo">🛰️</span><span class="sb-name" id="siteTitleSide">Simple Probe</span></div>
       <nav class="side-nav">
         <button class="nav-item active" data-view="dashboard">📊 <span>仪表盘</span></button>
         <button class="nav-item" data-view="clients">🖥️ <span>客户端</span></button>
@@ -65,7 +65,7 @@
     <div class="main">
       <header class="topbar">
         <div class="tb-left">
-          <h1 id="siteTitle">🛰️ 自托管监控<span class="dot">.</span></h1>
+          <h1 id="siteTitle">🛰️ Simple Probe<span class="dot">.</span></h1>
         </div>
         <div class="spacer"></div>
         <a class="icon-btn" id="btnHome" href="/" title="查看公开状态页（首页）">🏠</a>
