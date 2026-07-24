@@ -51,7 +51,7 @@ SQLite 单文件。无需额外安装数据库服务。
 
 ### Q: 忘记 2FA 怎么办？
 
-使用启用 2FA 时生成的一次性重置 Token。详见 [TOTP 2FA](/totp/)。
+在服务器上运行 `sudo bash install.sh --reset-admin-token` 重置管理员 Token，然后重新绑定 2FA。
 
 ### Q: 数据库被偷了怎么办？
 
@@ -85,7 +85,6 @@ SQLite 单文件。无需额外安装数据库服务。
 - 哪吒：服务端可向 Agent 下发指令（Web 终端、计划任务）
 - Simple Probe：服务端无法向 Agent 下发任何指令
 
-详见 [竞品对比](/comparison/) 和 [威胁模型](/threat-model/)。
 
 ### Q: 支持多用户吗？
 
