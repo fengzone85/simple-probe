@@ -1,5 +1,11 @@
 # Changelog
 
+## 修复受控端 Docker 形态下多盘识别错误（2026-07-24）
+- 现象：Docker 部署的受控端在 dashboard 看不到宿主真实磁盘（根盘与第二块数据盘缺失），且 docker 状态卷被误报为一块盘。
+- 根因：`/hostproc/mounts` 实际是容器 mount 命名空间视图，宿主真实盘在里面临时带 `/host` 前缀（如 `/host`、`/host/data`）；`disk_list` 又盲拼一次 `/host` 前缀变成 `/host/host/...`，导致 `isdir` 全 False、宿主盘全部被跳过，而容器内 docker 卷 `/data`（无前缀）反而被当成真实盘误报。
+- 修复（`agent/collector.py` `disk_list`）：Docker 形态下仅保留带 `/host` 前缀的挂载条目（宿主真实盘），统计用 mount 本身（bind 可达），展示时去掉 `/host` 前缀还原为宿主路径（如 `/`、`/data`）；容器自身挂载（docker 卷、`/etc/hosts` 等伪盘）被排除。
+- 验证：`disk_list('/host')` 正确返回宿主 `/`(根盘)、`/data`(第二块盘)、`/boot/efi`；服务端收到的 `disks` 字段一致。
+
 ## 初始化向导 UX 修复：adm_ Token 被 .env 静默覆盖陷阱（2026-07-24）
 - 现象：用户在「首次设置」向导生成了 `adm_xxx` 管理员 Token，之后 `install.sh` 把 `ADMIN_TOKEN` 写进 `.env` 并重启，`.env` 的 token 通过 `getAdminToken()` 的 env 优先逻辑覆盖了 DB 里的 `adm_xxx`，导致用户保存的 `adm_xxx` 永远登不进后台；更严重的是用户把 `adm_xxx`（管理员 Token）误当受控端 Token 配进受控端，导致 Agent 连接失败。
 - 修复 1（服务端 `api.js` `/setup/generate`）：当 `.env` 已配置有效 `ADMIN_TOKEN`（与 `getAdminToken()` 的 env 分支判定逐字一致）时，**拒绝生成**会被静默覆盖的 `adm_` token，返回 `400 {error, envConfigured:true}` 并提示改用 `.env` 的 token。彻底堵住「先向导后补 `.env`」的时序陷阱；首次部署（无 `.env`）流程不受影响。
