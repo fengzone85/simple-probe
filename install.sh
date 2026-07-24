@@ -46,7 +46,7 @@ msg() {
 # 需要更新，并在更新后直观了解改动内容。远端菜单会据此提示「发现新版」。
 SCRIPT_VERSION="1.1.1"
 SCRIPT_DATE="2026-07-10"
-SCRIPT_NOTES="更新服务端前先释放端口(修复8080占用)；更新后重新加载最新脚本自身；端口占用兜底强杀"
+SCRIPT_NOTES="更新服务端前先释放端口(修复8081占用)；更新后重新加载最新脚本自身；端口占用兜底强杀"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
@@ -386,14 +386,14 @@ install_server() {
     # 写入构建时间（供页脚显示）
     date +"%Y-%m-%d %H:%M:%S (%Z)" > build_time.txt
     echo -e "${GREEN}[OK]   构建时间已写入 build_time.txt${NC}"
-    # 先清理本项目旧实例，避免重跑/升级时端口或容器冲突（如 8080 已被占用）
+    # 先清理本项目旧实例，避免重跑/升级时端口或容器冲突（如 8081 已被占用）
     docker compose down 2>/dev/null || true
     docker compose up -d --build
 
     echo ""
     echo -e "${GREEN}✅ 服务端已启动${NC}"
-    echo -e "   仪表盘: http://localhost:8080  （当前为明文测试端口）"
-    echo -e "   生产请将 Nginx + TLS 反代到 127.0.0.1:8080（见 README 部署章节）"
+    echo -e "   仪表盘: http://localhost:8081  （当前为明文测试端口）"
+    echo -e "   生产请将 Nginx + TLS 反代到 127.0.0.1:8081（见 README 部署章节）"
 }
 
 # ── 更新：本安装脚本自身 ──────────────────────────────────────────────────────
@@ -495,11 +495,11 @@ update_server() {
     # 先停掉旧容器并释放端口，避免「端口已被占用」导致新容器起不来
     echo -e "${YELLOW}[信息] 停止旧容器并释放端口…${NC}"
     docker compose down --remove-orphans 2>/dev/null || true
-    # 兜底：若 8080 仍被任意容器占用（孤儿容器 / 其它 compose 项目），强制移除
+    # 兜底：若 8081 仍被任意容器占用（孤儿容器 / 其它 compose 项目），强制移除
     local _cid
-    _cid="$(docker ps -q --filter "publish=8080" 2>/dev/null | head -n1)"
+    _cid="$(docker ps -q --filter "publish=8081" 2>/dev/null | head -n1)"
     if [[ -n "$_cid" ]]; then
-        echo -e "${YELLOW}[信息] 检测到 8080 仍被容器 $_cid 占用，强制移除…${NC}"
+        echo -e "${YELLOW}[信息] 检测到 8081 仍被容器 $_cid 占用，强制移除…${NC}"
         docker rm -f "$_cid" 2>/dev/null || true
     fi
     echo -e "${YELLOW}[信息] 重建并重启服务端…${NC}"

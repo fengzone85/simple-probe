@@ -1,12 +1,12 @@
 # 隐藏源站 IP：Cloudflare Tunnel / Tailscale 接入指南
 
-本项目即便**不上 Cloudflare 的 CDN/WAF（"CF 盾"）**也已具备基本安全（源站 8080 仅绑回环、TLS、强 admin token、CSP、独立 agent token）。
+本项目即便**不上 Cloudflare 的 CDN/WAF（"CF 盾"）**也已具备基本安全（源站 8081 仅绑回环、TLS、强 admin token、CSP、独立 agent token）。
 
 但不用 CF 有一个真实缺口：**VPS 公网 IP 直接暴露**，会被全网扫描/弱口令爆破直打 Nginx，也无托管 WAF 兜底。
 
 本指南提供两种**让 VPS 完全不开放入站端口**的方案，从源头消除"源站暴露"问题。两者任选其一（也可组合）。无论哪种，都**不替代认证**：admin token 仍需强随机。
 
-> 前置：服务端请用 `server/docker-compose.yml`（8080 绑 `127.0.0.1`），并已在本地 Nginx 配好 TLS + 限流（见 `nginx/monitor.conf.example`）。下面两种方案都让外部流量"经隧道到达本机 Nginx"，Nginx 的限流/HSTS/CSP 全部保留。
+> 前置：服务端请用 `server/docker-compose.yml`（8081 绑 `127.0.0.1`），并已在本地 Nginx 配好 TLS + 限流（见 `nginx/monitor.conf.example`）。下面两种方案都让外部流量"经隧道到达本机 Nginx"，Nginx 的限流/HSTS/CSP 全部保留。
 
 ---
 
@@ -85,8 +85,8 @@ sudo ufw enable
 Tailscale 流量经其 DERP 中继或 P2P，依赖**出站** UDP（及到 `derp.tailscale.com` 的出站），不占用入站端口。
 
 ### 3. 访问与上报都走 Tailscale 地址
-- 仪表盘：浏览器打开 `http://<vps-magic-dns>:8080`（如 `http://vps-monitor.tailnet-name.ts.net:8080`）。
-- 受控端 agent：把上报地址从公网域名改成 Tailscale 地址（例如 `http://vps-monitor.tailnet-name.ts.net:8080`）。
+- 仪表盘：浏览器打开 `http://<vps-magic-dns>:8081`（如 `http://vps-monitor.tailnet-name.ts.net:8081`）。
+- 受控端 agent：把上报地址从公网域名改成 Tailscale 地址（例如 `http://vps-monitor.tailnet-name.ts.net:8081`）。
   - 若仍想用 Nginx + TLS，让 Nginx 监听 Tailscale 接口（或 `0.0.0.0`，但因无公网路由，仅 tailnet 可达），agent 用 `https://...ts.net`。
 - admin token、agent token 照常填，认证逻辑不变。
 

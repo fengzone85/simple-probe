@@ -2,12 +2,12 @@ services:
   server:
     build: .
     restart: unless-stopped
-    # 仅绑定本机回环，配合宿主机 Nginx/宝塔 反代；外部无法直接触达 8080。
+    # 仅绑定本机回环，配合宿主机 Nginx/宝塔 反代；外部无法直接触达 8081。
     # 若 Nginx 也是独立 Docker 容器（非宿主机进程），请改用共享 Docker 网络 + 服务名互访，并删除此端口映射。
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
     environment:
-      - PORT=8080
+      - PORT=8081
       - DB_PATH=/data/monitor.db
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - AGENT_INTERVAL=15

@@ -138,7 +138,7 @@ function getPublicBaseUrl(req) {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, '');
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim() || 'https';
   const host = req.get('host');
-  if (!host) return 'http://localhost:8080';
+  if (!host) return 'http://localhost:8081';
   return `${proto}://${host}`;
 }
 

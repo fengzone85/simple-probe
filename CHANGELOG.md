@@ -34,9 +34,9 @@
 - 适用场景：整机迁移、Docker 卷误删恢复、定时自动备份（cron）、数据库容量监控
 
 ## install.sh v1.1.1（2026-07-10）
-- 修复「更新服务端」仍报 8080 占用：根因是**运行中的 install.sh 是旧实例**（先 `git pull` 新源码但内存逻辑仍是旧的，旧逻辑缺 `docker compose down`）。
+- 修复「更新服务端」仍报 8081 占用：根因是**运行中的 install.sh 是旧实例**（先 `git pull` 新源码但内存逻辑仍是旧的，旧逻辑缺 `docker compose down`）。
 - 新增：源码同步完成后 `exec` 磁盘上的最新 `install.sh --update-server`，确保后续停旧容器/重建一定用最新代码（防「拉新跑旧」）。用 `SP_REEXECED` 环境变量防自循环。
-- 端口兜底：`docker compose down --remove-orphans` 后，若 8080 仍被任意容器占用（孤儿容器/其它 compose 项目），`docker ps --filter publish=8080` 定位并 `docker rm -f` 强制释放。
+- 端口兜底：`docker compose down --remove-orphans` 后，若 8081 仍被任意容器占用（孤儿容器/其它 compose 项目），`docker ps --filter publish=8081` 定位并 `docker rm -f` 强制释放。
 - 版本号升至 `1.1.1`。
 
 ## install.sh 版本化 + 更新检查 v1.1.0（2026-07-10）
@@ -44,7 +44,7 @@
 - 菜单横幅显示 `vX.Y.Z (日期) + 本版要点`；进菜单时静默拉取远端版本（3s 超时、失败即跳过），有新版黄字提示「▲ 发现新版，建议选 4) 更新安装脚本」，否则绿字「✓ 已是最新」。
 - 「4) 更新安装脚本」覆盖前显示 `旧版 → 新版` 与新版要点，直观了解改动。
 - 「5) 更新服务端」记录 git 旧/新短 commit，并列出本次拉取的提交（`git log --oneline old..new`），更新内容一目了然。
-- 修复：更新服务端重建前先 `docker compose down` 释放端口，避免 8080 被旧容器占用导致新容器起不来。
+- 修复：更新服务端重建前先 `docker compose down` 释放端口，避免 8081 被旧容器占用导致新容器起不来。
 - 维护约定：以后每次改脚本行为，同步 +1 版本号、更新日期与要点。
 
 ## 仓库卫生：从公开仓库移除测试 SQLite 库（2026-07-09）
@@ -168,7 +168,7 @@
 ## 安全修复 P0：令牌比较与 HTTPS 白名单（2026-07-09）
 
 - **恒定时间令牌比较**（`server/src/auth.js`）：`agentAuth` / `adminAuth` 改用 `crypto.timingSafeEqual()`（新增 `safeEqual` 辅助，长度不等直接返回 false），消除令牌比较的时序侧信道（`S1`）。
-- **`X-Forwarded-Proto` 改为白名单**（`server/src/auth.js`）：原逻辑为"有头且非 https 才拒绝"，会漏掉直连 :8080 的空头请求、且头可被伪造；现改为默认拒绝、仅 `proto === 'https'` 放行（`S2`）。本地明文测试可显式设 `ADMIN_ALLOW_HTTP=1`（生产切勿设置）。
+- **`X-Forwarded-Proto` 改为白名单**（`server/src/auth.js`）：原逻辑为"有头且非 https 才拒绝"，会漏掉直连 :8081 的空头请求、且头可被伪造；现改为默认拒绝、仅 `proto === 'https'` 放行（`S2`）。本地明文测试可显式设 `ADMIN_ALLOW_HTTP=1`（生产切勿设置）。
 - **quick-start 兼容**（`docker-compose.yml` 根目录）：因上述白名单，明文 http 直连会 403，故为该示例显式加 `ADMIN_ALLOW_HTTP=1`，保持快速测试可用。
 
 ## 前端可靠性与安全可观测性（2026-07-09）

@@ -56,7 +56,7 @@ app.use(express.json({ limit: '16kb' }));
 
 // ---- Prometheus /metrics 导出（P3：可观测性）----
 // 通过 Bearer Token 鉴权（复用 ADMIN_TOKEN，恒定时间比较），不强制 https，便于内网抓取。
-// 例：curl -H "Authorization: Bearer $ADMIN_TOKEN" http://host:8080/metrics
+// 例：curl -H "Authorization: Bearer $ADMIN_TOKEN" http://host:8081/metrics
 function promEscape(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 }
@@ -232,7 +232,7 @@ function runPrune() {
 runPrune();
 setInterval(runPrune, 3600 * 1000);
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.PORT || 8081);
 const server = app.listen(PORT, () => {
   console.log(`[monitor] server listening on :${PORT}`);
   alerts.start();

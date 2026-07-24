@@ -50,7 +50,7 @@ This project earned a **⭐⭐⭐⭐⭐ (5/5)** rating in two independent securi
 ```
 
 - **Agent is outbound-only**: reads metrics from `/proc` and POSTs them to `/api/report`. No firewall ports need to be opened on the monitored host; NAT / internal networks are unaffected.
-- **Server**: binds `localhost:8080` and is exposed to the internet solely via Nginx + TLS on port 443.
+- **Server**: binds `localhost:8081` and is exposed to the internet solely via Nginx + TLS on port 443.
 
 ## Directory layout
 
@@ -80,7 +80,7 @@ This project earned a **⭐⭐⭐⭐⭐ (5/5)** rating in two independent securi
 3. **Authentication** — each agent has an `AGENT_ID` + `AGENT_TOKEN` (generated server-side, stored as sha256 in the DB); reports require `X-Agent-ID` + `Bearer`; unknown / mismatched are rejected.
 4. **Transport encryption** — HTTPS throughout.
 5. **Input validation** — `/api/report` strictly validates value ranges and types; out-of-range / malformed input is rejected with 400.
-6. **Rate limiting** — Nginx rate-limits the report endpoint (based on the real TCP peer, the true security boundary). The server also has an application-layer fallback limiter (20 req/IP/10s, plus per-endpoint limits on register/setup), but its `req.ip` comes from the reverse proxy's `X-Forwarded-For`, which **an attacker can spoof** — so the app-layer limiter is **not** a security boundary, only a fallback. In production rely on Nginx `limit_req` and never expose port 8080 to the public internet.
+6. **Rate limiting** — Nginx rate-limits the report endpoint (based on the real TCP peer, the true security boundary). The server also has an application-layer fallback limiter (20 req/IP/10s, plus per-endpoint limits on register/setup), but its `req.ip` comes from the reverse proxy's `X-Forwarded-For`, which **an attacker can spoof** — so the app-layer limiter is **not** a security boundary, only a fallback. In production rely on Nginx `limit_req` and never expose port 8081 to the public internet.
 7. **Minimal attack surface** — local SQLite file; all dashboard / write endpoints require the admin token.
 8. **Weak-token startup guard** — at startup, if `ADMIN_TOKEN` is empty, equals the default `change-me-admin-token`, or is shorter than 16 chars, the server refuses to start (`process.exit(1)`), forcing the admin to set a strong token early.
 9. **HTTPS enforcement on admin APIs** — `adminAuth` checks `X-Forwarded-Proto`; any request proxied over a non-HTTPS origin is rejected with `403`, preventing plaintext transmission of the admin token. Note: this is fully effective only when the server port is NOT published to the public internet and only Nginx is exposed.
@@ -254,7 +254,7 @@ cp .env.example .env
 #       and must be >= 16 chars, otherwise the server refuses to start.
 
 # 3) Start
-docker compose up -d        # binds 127.0.0.1:8080 only (loopback); data in volume /data
+docker compose up -d        # binds 127.0.0.1:8081 only (loopback); data in volume /data
 
 # 4) Obtain TLS and set up the reverse proxy (see nginx/monitor.conf.example)
 cp nginx/monitor.conf.example /etc/nginx/conf.d/monitor.conf
@@ -263,12 +263,12 @@ nginx -t && systemctl reload nginx
 certbot --nginx -d monitor.yourdomain.com
 ```
 
-> **aaPanel (宝塔) users**: do not hand-write a conf that fights aaPanel. In aaPanel, create a site → reverse proxy pointing the domain to `127.0.0.1:8080`, and use aaPanel's Let's Encrypt one-click for TLS. Put the rate-limit zone (`limit_req_zone`) in "Nginx management → config" (the http block), and only keep `limit_req` in the site config.
+> **aaPanel (宝塔) users**: do not hand-write a conf that fights aaPanel. In aaPanel, create a site → reverse proxy pointing the domain to `127.0.0.1:8081`, and use aaPanel's Let's Encrypt one-click for TLS. Put the rate-limit zone (`limit_req_zone`) in "Nginx management → config" (the http block), and only keep `limit_req` in the site config.
 > If Nginx itself is a separate Docker container (not a host process), put server and Nginx on a shared Docker network, reach each other by service name, and remove the `127.0.0.1:` port mapping in `server/docker-compose.yml`.
 
 ### Hide the origin IP (optional, recommended)
 
-Even without Cloudflare's CDN/WAF ("CF shield"), the setup above (8080 bound to loopback + Nginx TLS + strong token + CSP) is already secure; however, the VPS public IP is still directly exposed and will be scanned / brute-forced, with no managed WAF.
+Even without Cloudflare's CDN/WAF ("CF shield"), the setup above (8081 bound to loopback + Nginx TLS + strong token + CSP) is already secure; however, the VPS public IP is still directly exposed and will be scanned / brute-forced, with no managed WAF.
 
 To **expose no inbound ports at all** and keep the origin IP invisible, see [`TUNNEL-GUIDE.md`](TUNNEL-GUIDE.md): it covers both Cloudflare Tunnel and Tailscale, with full commands and certificate / firewall notes.
 
@@ -305,10 +305,10 @@ A root `docker-compose.yml` is provided for a fast single-command launch of the 
 
 ```bash
 cp server/.env.example server/.env   # then edit ADMIN_TOKEN etc.
-docker compose up -d                 # serves on http://<host>:8080
+docker compose up -d                 # serves on http://<host>:8081
 ```
 
-> ⚠️ This quick start exposes the server on plaintext `:8080`. The admin token would travel unencrypted, so **do not use it for production**. For production, always put Nginx + TLS in front (see section A above).
+> ⚠️ This quick start exposes the server on plaintext `:8081`. The admin token would travel unencrypted, so **do not use it for production**. For production, always put Nginx + TLS in front (see section A above).
 
 ## Data management
 
@@ -364,7 +364,7 @@ sudo bash install.sh --db-stats
 - **Prune-failure alert**: if `prune` fails 3 times in a row (e.g. DB permission / disk issues), an email alert is sent so the metrics table does not silently grow without bound.
 - **Telegram alerts (optional)**: once `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `.env`, the alerts above are **also** delivered to Telegram in parallel with email (each channel fails independently). See `.env.example` for how to obtain them.
 - Provide `SMTP_PASS` in `.env` for mail (QQ Mail: Settings → Account → generate authorization code; not the login password). Telegram and email can be enabled independently.
-- **Send a test alert**: after configuring, verify with `curl -X POST -H 'X-Admin-Token: YOUR_TOKEN' http://localhost:8080/api/test-alert` (add `-H 'X-Forwarded-Proto: https'` when behind an Nginx proxy), click the **📨 Test Alert** button on the dashboard top-right (fill in the admin token first), or run `node scripts/test-notify.js` from the `server/` directory.
+- **Send a test alert**: after configuring, verify with `curl -X POST -H 'X-Admin-Token: YOUR_TOKEN' http://localhost:8081/api/test-alert` (add `-H 'X-Forwarded-Proto: https'` when behind an Nginx proxy), click the **📨 Test Alert** button on the dashboard top-right (fill in the admin token first), or run `node scripts/test-notify.js` from the `server/` directory.
 
 ## Read-only account (READONLY_TOKEN)
 
@@ -397,7 +397,7 @@ To integrate with Prometheus / Grafana and other observability stacks, the serve
 - Example:
 
 ```bash
-curl -H 'Authorization: Bearer <your READONLY_TOKEN>' http://localhost:8080/metrics
+curl -H 'Authorization: Bearer <your READONLY_TOKEN>' http://localhost:8081/metrics
 ```
 
 ## Windows monitored side

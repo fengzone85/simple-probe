@@ -80,8 +80,8 @@ function clearSessionCookie(res) {
 }
 
 // 协议白名单：仅允许经反向代理且原始请求为 HTTPS 时携带管理类凭证。
-// 直连 :8080（无 X-Forwarded-Proto 头、或伪造为 http）一律拒绝，
-// 杜绝伪造该头绕过、以及误暴露 8080 端口的情况。
+// 直连 :8081（无 X-Forwarded-Proto 头、或伪造为 http）一律拒绝，
+// 杜绝伪造该头绕过、以及误暴露 8081 端口的情况。
 // 本地开发/快速测试如需直连 http，可显式设置 ADMIN_ALLOW_HTTP=1（生产切勿设置）。
 function requireProto(req, res) {
   const proto = (req.header('X-Forwarded-Proto') || '').toLowerCase();

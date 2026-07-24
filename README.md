@@ -103,7 +103,7 @@ sudo bash install.sh --install-agent --server https://your-server:8008 --setup-t
 
 **关键设计：**
 - Agent 仅出站 POST 到 `/api/report`，响应仅用于错误日志，**从不执行**
-- 服务端绑定 `localhost:8080`，由 Nginx + TLS 反代对外暴露 443
+- 服务端绑定 `localhost:8081`，由 Nginx + TLS 反代对外暴露 443
 - 数据库存储 Token 哈希（SHA-256），非明文
 - 登录态用签名 `HttpOnly + Secure + SameSite=Strict` Cookie
 
@@ -143,7 +143,7 @@ diting/
 
 | 变量 | 必填 | 默认值 | 说明 |
 |---|---|---|---|
-| `PORT` | 否 | `8080` | HTTP 监听端口 |
+| `PORT` | 否 | `8081` | HTTP 监听端口 |
 | `ADMIN_TOKEN` | 首次 | — | 管理员 Token（≥16 位） |
 | `SETUP_TOKEN` | 否 | — | 受控端自助注册令牌 |
 | `SESSION_SECRET` | 推荐 | 随机 | Session 签名密钥（固定则重启不失效） |
@@ -214,7 +214,7 @@ diting/
 - `GET /metrics` 返回 Prometheus 文本格式
 - 鉴权：`Authorization: Bearer <ADMIN_TOKEN | READONLY_TOKEN>`
 - 指标：`monitor_agent_cpu_percent`、`monitor_agent_mem_percent`、`monitor_agent_disk_percent`、`monitor_agent_net_rx_rate_bytes` 等
-- 示例：`curl -H 'Authorization: Bearer TOKEN' http://localhost:8080/metrics`
+- 示例：`curl -H 'Authorization: Bearer TOKEN' http://localhost:8081/metrics`
 
 ---
 
@@ -229,7 +229,7 @@ diting/
 
 ## 🛡️ 安全加固清单
 
-- [ ] 通过 Nginx + TLS 反代，源站 8080 仅绑 `127.0.0.1`
+- [ ] 通过 Nginx + TLS 反代，源站 8081 仅绑 `127.0.0.1`
 - [ ] 设置强随机 `ADMIN_TOKEN`（≥16 位）
 - [ ] 设置 `SESSION_SECRET`（固定随机值，防重启失效）
 - [ ] 启用 TOTP 两步验证（设置 → 账户安全）
