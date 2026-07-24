@@ -86,17 +86,18 @@ def disk_list(root='/'):
         mounts_path = '/proc/mounts'
         prefix = ''
     else:
-        # Docker 形态（root='/host'）：宿主 /proc 必须通过 `-v /proc:/hostproc:ro`
-        # 单独挂入。因为对 '/' 的递归 bind 会把「容器自身」的 proc 带进 /host/proc，
-        # 直接读 /host/proc/mounts 会拿到容器挂载表（含 overlay 根、/etc/hosts 等伪盘），
-        # 而非真实宿主磁盘。故优先使用独立的 /hostproc/mounts。
+        # Docker 形态（root='/host'）：宿主真实盘在此以 /host 前缀出现于**容器**
+        # mount 命名空间视图（因为把宿主 / 递归 bind 到 /host 后，宿主根在容器视图
+        # 中显示为 /host，其数据盘如 /host/data 同理）。因此必须读容器视图：
+        #   1) 优先 /hostproc/mounts（需挂 `-v /proc:/hostproc:ro`，bind 容器自身 /proc）；
+        #   2) 否则回退容器自身 /proc/mounts（一定存在，同为容器视图）。
+        # 切勿读 /host/proc/mounts——那是宿主 /proc 文件，内容无 /host 前缀，会导致
+        # 全盘被前缀过滤跳过、读不到任何真实盘。
         prefix = root.rstrip('/')
-        mounts_path = os.path.join(root, 'proc', 'mounts')
         if prefix == '/host' and os.path.exists('/hostproc/mounts'):
             mounts_path = '/hostproc/mounts'
-    if not os.path.exists(mounts_path):
-        mounts_path = '/proc/mounts'
-        prefix = ''
+        else:
+            mounts_path = '/proc/mounts'
     # 先收集所有候选（含底层设备号 st_dev），再按 st_dev 去重。
     cands = []
     try:

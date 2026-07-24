@@ -364,7 +364,8 @@ docker run -d --name monitor-agent --restart unless-stopped \
 
 > **采集真实宿主机数据的关键参数**：
 > - `--network host`：共享宿主机网络命名空间，`/proc/net/dev` 才能反映真实流量（默认 bridge 网络读到的是容器视角）。
-> - `-v /:/host:ro` + `-e DISK_PATH=/host`：只读挂载宿主机根目录，使磁盘使用率统计的是 VPS 根盘而非容器 overlay。
+> - `-v /:/host:ro` + `-e DISK_PATH=/host`：只读挂载宿主机根目录，使磁盘使用率统计的是 VPS 根盘而非容器 overlay。**此挂载同时负责识别多块硬盘**（含数据盘）：agent 在容器 mount 命名空间视图中按 `/host` 前缀筛选真实宿主盘，再去掉前缀还原为宿主路径（如 `/data`），docker 卷与 `/etc/hosts` 等伪盘会被自动排除。
+> - 可选 `-v /proc:/hostproc:ro`：把容器自身 `/proc` 单独挂入，agent 优先用它读取容器 mount 视图（语义更清晰；不挂也能工作，agent 会回退到容器自身 `/proc/mounts`）。
 > - 若直接在裸机（非 Docker）运行 agent，则 `DISK_PATH` 保持默认 `/` 即可。
 
 > `host-monitor-agent` 镜像需先在受控端构建：进入 `agent/` 目录 `docker build -t host-monitor-agent .`，或推送至私有/公有镜像仓库后 `docker pull`。
