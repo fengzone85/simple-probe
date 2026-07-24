@@ -1,5 +1,28 @@
 # Changelog
 
+## 初始化向导 UX 修复：adm_ Token 被 .env 静默覆盖陷阱（2026-07-24）
+- 现象：用户在「首次设置」向导生成了 `adm_xxx` 管理员 Token，之后 `install.sh` 把 `ADMIN_TOKEN` 写进 `.env` 并重启，`.env` 的 token 通过 `getAdminToken()` 的 env 优先逻辑覆盖了 DB 里的 `adm_xxx`，导致用户保存的 `adm_xxx` 永远登不进后台；更严重的是用户把 `adm_xxx`（管理员 Token）误当受控端 Token 配进受控端，导致 Agent 连接失败。
+- 修复 1（服务端 `api.js` `/setup/generate`）：当 `.env` 已配置有效 `ADMIN_TOKEN`（与 `getAdminToken()` 的 env 分支判定逐字一致）时，**拒绝生成**会被静默覆盖的 `adm_` token，返回 `400 {error, envConfigured:true}` 并提示改用 `.env` 的 token。彻底堵住「先向导后补 `.env`」的时序陷阱；首次部署（无 `.env`）流程不受影响。
+- 修复 2（前端 `admin.html` 向导页）：新增醒目提示，明确「这是**管理员后台登录** Token，**不能用于受控端**；受控端用『客户端』列表生成的客户端 Token（无 `adm_` 前缀）」，从源头消除概念混淆。
+- 配套操作：受控端 `j4125-self` 经 `/api/agents/:id/reset-token` 重置新客户端 Token（无前缀纯 hex），旧 Token 立即失效，配回受控端即可恢复连接（需保证 `SERVER_URL` 为 https）。
+
+## 数据保留天数后台配置（未版本化，开发中）
+- 后台「设置 → 告警规则」新增「指标保留天数」输入框（范围 7-3650 天，默认 30 天）
+- 服务端 prune 逻辑改为从数据库动态读取保留天数（`db.getRetentionDays()`），设置变更后 1 小时内自动生效，无需重启
+- 三级优先级：后台显式设置 > 环境变量 `RETENTION_DAYS` > 硬编码默认 30 天
+- 边界保护：小于 7 天钳制为 7，大于 3650 天钳制为 3650（10 年），无效值自动回退到下一级
+- 旧行为兼容：之前仅通过环境变量 `RETENTION_DAYS`（默认 30）控制，现仍可作为初始默认值生效
+
+## install.sh 数据库管理子命令（未版本化，开发中）
+- `install.sh` 新增数据库备份/恢复/统计管理子命令，集成到统一安装管理脚本：
+  - `--backup [路径]`：热备份数据库，默认存到 `/var/backups/simple-probe/monitor_时间戳.db`。优先通过 `sqlite3 .backup` 命令热备份（不中断服务），无 sqlite3 时回退到 `docker cp` / `cp`
+  - `--restore <路径>`：从备份恢复数据库。恢复前自动备份当前状态（`pre_restore_*.db`，可回滚），自动校验备份文件完整性（SQLite 魔数 + `PRAGMA integrity_check`），需输入 `yes` 确认
+  - `--backup-list`：列出 `/var/backups/simple-probe/` 下已有备份
+  - `--db-stats`：查看数据库统计（文件大小、各表记录数、指标时间范围、占用明细）
+- 智能定位数据库：自动检测 Docker 命名卷 `server-data`（容器内拷贝 / 临时容器挂载卷）或宿主机文件路径
+- 交互菜单新增 `8) 数据库管理（备份/恢复/统计）` 子菜单
+- 适用场景：整机迁移、Docker 卷误删恢复、定时自动备份（cron）、数据库容量监控
+
 ## install.sh v1.1.1（2026-07-10）
 - 修复「更新服务端」仍报 8080 占用：根因是**运行中的 install.sh 是旧实例**（先 `git pull` 新源码但内存逻辑仍是旧的，旧逻辑缺 `docker compose down`）。
 - 新增：源码同步完成后 `exec` 磁盘上的最新 `install.sh --update-server`，确保后续停旧容器/重建一定用最新代码（防「拉新跑旧」）。用 `SP_REEXECED` 环境变量防自循环。

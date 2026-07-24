@@ -28,6 +28,7 @@
       <div class="login-logo">🚀</div>
       <h1>首次设置</h1>
       <p class="login-sub">生成管理员 Token，请务必保存！</p>
+      <p class="hint">⚠️ 这是<strong>管理员后台登录</strong> Token，仅用于登录本控制台，<strong>不能用于受控端</strong>配置。受控端用的是「客户端」列表里生成的客户端 Token（无 adm_ 前缀）。</p>
       <button class="btn block" id="btnSetupGenerate">生成管理员 Token</button>
       <div id="setupResult" style="display:none;margin-top:12px">
         <div class="token-show" id="setupTokenDisplay" style="font-size:13px;word-break:break-all"></div>
@@ -187,6 +188,9 @@
               </div>
               <div class="field"><label>离线判定阈值 (秒，超过该时长未上报即视为离线)</label><input type="number" id="a_offline" min="5" step="5" /></div>
               <p class="hint">保存后实时生效：前端卡片高亮与后端告警推送（邮件 / Telegram）均按此判定。</p>
+              <h4 style="margin-top:18px">数据保留</h4>
+              <div class="field"><label>指标保留天数 (7-3650，过期数据每小时自动清理)</label><input type="number" id="a_retention" min="7" max="3650" /></div>
+              <p class="hint">超出保留时长的历史指标将自动删除，控制数据库体积。缩短会立即在下一次清理时生效（最长保留 10 年）。</p>
             </div>
 
             <div class="tab-pane" data-spane="security" style="display:none">

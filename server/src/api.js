@@ -45,6 +45,29 @@ const rateLimit = (req, res, next) => {
 };
 router.use(rateLimit);
 
+// ---- 登录专项限流（M-5 修复）----
+// 全局限流（20次/10s）对登录来说太宽松：攻击者仍可以 20 次/10s 的速度尝试 Token。
+// 此处对 /api/login 单独收紧到每 IP 每 60s 最多 5 次，大幅降低暴力破解效率。
+// Admin Token 为 256 位随机值，理论上不可暴力破解；此限流主要防日志刷屏与资源消耗。
+const LOGIN_WINDOW = 60000, LOGIN_MAX = 5;
+const loginHits = new Map();
+setInterval(() => loginHits.clear(), LOGIN_WINDOW).unref?.();
+const loginRateLimit = (req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  const now = Date.now();
+  let rec = loginHits.get(ip);
+  if (!rec || now > rec.reset) {
+    loginHits.set(ip, { reset: now + LOGIN_WINDOW, count: 1 });
+    return next();
+  }
+  rec.count++;
+  loginHits.set(ip, rec);
+  if (rec.count > LOGIN_MAX) {
+    return res.status(429).json({ error: 'too many login attempts, retry in 60s' });
+  }
+  next();
+};
+
 // ---- helpers ----
 const { num, str, validateReport, sanitizeCss } = require('./validate');
 function getAdminToken() {
@@ -74,6 +97,11 @@ const setupRateLimit = (req, res, next) => {
   next();
 };
 router.post('/setup/generate', setupRateLimit, (req, res) => {
+  // 若已通过 .env 配置有效 ADMIN_TOKEN，本向导生成的 token 会被 env 静默覆盖、永远无法登录，
+  // 属于误导。直接拒绝并提示改用 .env 的 token，避免生成无用的 adm_ token（UX 陷阱修复）。
+  if (process.env.ADMIN_TOKEN && process.env.ADMIN_TOKEN !== 'change-me-admin-token' && process.env.ADMIN_TOKEN.length >= 16) {
+    return res.status(400).json({ error: '已通过 .env 配置 ADMIN_TOKEN，请直接用 .env 中的 token 登录；本向导仅在未配置 .env 时生效。', envConfigured: true });
+  }
   // 原子写入：仅当未初始化时落库，并发请求中只有一个成功，其余返回 400，杜绝 Token 抢注竞态。
   const token = 'adm_' + crypto.randomBytes(16).toString('hex');
   if (!db.setConfigIfAbsent('admin_token_raw', token)) {
@@ -504,7 +532,7 @@ router.post('/test-alert', adminOnly, async (req, res) => {
 
 // ---- Admin 登录（签发签名 Session Cookie；若启用 2FA 需 TOTP）----
 // 登录后前端不再持有明文 Admin Token，凭证以 HttpOnly+Secure Cookie 维持，降低 XSS 窃取风险。
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimit, async (req, res) => {
   if (!requireProto(req, res)) return; // F2：与管理端点一致，强制经 HTTPS 反代，杜绝明文 Token
   const { token, totp: code } = req.body || {};
   if (!token || !safeEqual(token, getAdminToken())) {
