@@ -112,8 +112,15 @@ async function initPublic() {
   }
   document.title = title + ' · 状态页';
   if ($('pvFooter')) {
-    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener">Simple Probe</a>';
+    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener">Simple Probe</a><span id="fvVer" style="margin-left:6px;color:var(--muted);font-size:11px"></span>';
   }
+  // 异步加载版本信息
+  fetch('/api/version').then(r => r.json()).then(function (v) {
+    var el = $('fvVer');
+    if (el && v.version) {
+      el.textContent = 'v' + v.version + (v.build_time && v.build_time !== 'unknown' ? ' · ' + v.build_time : '');
+    }
+  }).catch(function () {});
   if (!enabled) {
     if ($('pvOverview')) $('pvOverview').innerHTML = '';
     if ($('pvGrid')) $('pvGrid').innerHTML = '<div class="empty">本站暂未开放公开状态页</div>';
