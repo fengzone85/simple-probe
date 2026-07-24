@@ -155,33 +155,100 @@ function verifyTotpHeader(req) {
 }
 
 // IP 白名单中间件。从 DB uiSettings.admin_allow_ips 读取，支持逗号分隔 IP/CIDR，空则全放行。
+// 同时支持 IPv4 和 IPv6（含 IPv4-mapped IPv6 如 ::ffff:192.168.1.1）。
 function ipWhitelist(req, res, next) {
   const raw = (db.getUiSettings().admin_allow_ips || '').trim();
   if (!raw) return next();
-  const ips = raw.split(',').map(s => s.trim()).filter(Boolean);
-  if (ips.length === 0) return next();
-  const ip = req.ip || req.socket.remoteAddress;
-  if (ips.includes(ip)) return next();
-  for (const entry of ips) {
+  const entries = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (entries.length === 0) return next();
+  const ip = normalizeIp(req.ip || req.socket.remoteAddress || '');
+  if (!ip) return res.status(403).json({ error: 'ip not allowed' });
+  // 精确匹配（同时比较原始形态与归一化形态）
+  for (const entry of entries) {
+    if (ip === normalizeIp(entry) || ip === entry) return next();
+  }
+  // CIDR 匹配
+  for (const entry of entries) {
     if (entry.includes('/')) {
-      const [range, bits] = entry.split('/');
-      const n = parseInt(bits);
-      if (ipInCIDR(ip, range, n)) return next();
+      if (ipInCIDR(ip, entry)) return next();
     }
   }
   return res.status(403).json({ error: 'ip not allowed' });
 }
-function ipInCIDR(ip, cidr, bits) {
-  const ipN = ipToInt(ip);
-  const cidrN = ipToInt(cidr);
-  if (ipN === null || cidrN === null) return false;
+
+// 归一化 IP：剥除 IPv4-mapped IPv6 前缀（::ffff:），小写，便于比对。
+function normalizeIp(ip) {
+  if (!ip) return '';
+  let s = String(ip).toLowerCase().trim();
+  if (s.startsWith('::ffff:')) s = s.slice(7);
+  return s;
+}
+
+// CIDR 匹配：自动识别 IPv4 / IPv6，调用对应实现。
+function ipInCIDR(ip, cidrEntry) {
+  const parts = cidrEntry.split('/');
+  if (parts.length !== 2) return false;
+  const range = parts[0].toLowerCase().trim();
+  const bits = parseInt(parts[1], 10);
+  if (isNaN(bits) || bits < 0) return false;
+  if (range.includes(':')) {
+    // IPv6 CIDR
+    return ip6InCIDR(ip, range, bits);
+  }
+  // IPv4 CIDR
+  return ip4InCIDR(ip, range, bits);
+}
+
+function ip4InCIDR(ip, cidr, bits) {
+  const ipN = ip4ToInt(ip);
+  const cidrN = ip4ToInt(cidr);
+  if (ipN === null || cidrN === null || bits > 32) return false;
   const mask = bits === 0 ? 0 : ~(2 ** (32 - bits) - 1);
   return (ipN & mask) === (cidrN & mask);
 }
-function ipToInt(ip) {
+
+function ip4ToInt(ip) {
   const p = ip.split('.').map(Number);
-  if (p.length !== 4 || p.some(isNaN)) return null;
+  if (p.length !== 4 || p.some(n => isNaN(n) || n < 0 || n > 255)) return null;
   return ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+}
+
+// IPv6 CIDR 匹配：将地址解析为 128 位 BigInt，按前缀长度比较。
+function ip6InCIDR(ip, cidr, bits) {
+  if (bits > 128) return false; // BUG 1 修复：防止 bits 过大导致 BigInt >> 负数抛 RangeError
+  const ipBits = ip6ToBits(ip);
+  const cidrBits = ip6ToBits(cidr);
+  if (ipBits === null || cidrBits === null) return false;
+  if (bits === 0) return true;
+  if (bits === 128) return ipBits === cidrBits;
+  const shift = 128n - BigInt(bits);
+  return (ipBits >> shift) === (cidrBits >> shift);
+}
+
+function ip6ToBits(ip) {
+  try {
+    // 手动展开压缩格式 :: 与全写为 8 段 × 16 位
+    let s = String(ip).toLowerCase().trim();
+    if (!s.includes(':')) return null;
+    // 展开 ::
+    let parts = s.split('::');
+    if (parts.length > 2) return null; // 非法
+    let head = parts[0] ? parts[0].split(':') : [];
+    let tail = parts.length === 2 && parts[1] ? parts[1].split(':') : [];
+    const missing = 8 - head.length - tail.length;
+    if (missing < 0) return null;
+    const full = [...head, ...Array(missing).fill('0'), ...tail];
+    if (full.length !== 8) return null;
+    let bits = 0n;
+    for (let i = 0; i < 8; i++) {
+      const segment = parseInt(full[i] || '0', 16);
+      if (isNaN(segment) || segment < 0 || segment > 0xffff) return null;
+      bits = (bits << 16n) | BigInt(segment);
+    }
+    return bits;
+  } catch (e) {
+    return null;
+  }
 }
 
 module.exports = {

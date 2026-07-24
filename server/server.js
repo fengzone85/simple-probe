@@ -21,6 +21,11 @@ app.use((req, res, next) => {
     'Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
   );
+  // L-1 修复：补充安全响应头，纵深防御 XSS / 点击劫持 / MIME 嗅探
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-XSS-Protection', '0'); // 现代浏览器已弃用，CSP 是主力；设为 0 避免 IE 的过滤漏洞
   next();
 });
 
@@ -60,13 +65,20 @@ const METRIC_DEFS = [
   { name: 'monitor_agent_last_seen_seconds', desc: '最近一次上报的 Unix 时间戳（秒）', get: m => m ? Math.floor((m.ts || 0) / 1000) : null },
 ];
 app.get('/metrics', (req, res) => {
-  // M-2：默认强制 HTTPS，避免 ADMIN_TOKEN 在内网明文抓取时被嗅探。
-  // 本地直连 http 调试可设 ADMIN_ALLOW_HTTP=1（与后台管理端同款开关）。
-  const proto = String(req.header('X-Forwarded-Proto') || '').toLowerCase().split(',')[0].trim();
-  const isHttps = proto === 'https' || req.secure;
-  if (!isHttps && process.env.ADMIN_ALLOW_HTTP !== '1') {
-    return res.status(403).set('Content-Type', 'text/plain').send('403 HTTPS required');
-  }
+  // M-4 修复：/metrics 同样受 IP 白名单约束（与 /api 管理端一致），防 Token 泄露后从任意 IP 拉取数据。
+  // ipWhitelist 内部空则全放行，未配置白名单时行为不变。
+  ipWhitelist(req, res, () => {
+    // M-2：默认强制 HTTPS，避免 ADMIN_TOKEN 在内网明文抓取时被嗅探。
+    // 本地直连 http 调试可设 ADMIN_ALLOW_HTTP=1（与后台管理端同款开关）。
+    const proto = String(req.header('X-Forwarded-Proto') || '').toLowerCase().split(',')[0].trim();
+    const isHttps = proto === 'https' || req.secure;
+    if (!isHttps && process.env.ADMIN_ALLOW_HTTP !== '1') {
+      return res.status(403).set('Content-Type', 'text/plain').send('403 HTTPS required');
+    }
+    _metricsHandler(req, res);
+  });
+});
+function _metricsHandler(req, res) {
   const auth = req.header('Authorization') || '';
   const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!t || !safeEqual(t, process.env.ADMIN_TOKEN)) {
@@ -93,7 +105,7 @@ app.get('/metrics', (req, res) => {
     }
   }
   res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8').send(lines.join('\n') + '\n');
-});
+}
 
 // IP 白名单：保护管理 API（公开接口 /public/* 和 /report 除外）
 app.use('/api', (req, res, next) => {
@@ -165,12 +177,18 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // periodic prune of old metrics
-const retentionDays = Number(process.env.RETENTION_DAYS || 30);
+// 保留天数从后台设置动态读取（db.getRetentionDays），设置变更后下次清理自动生效。
 let pruneFails = 0;
-setInterval(() => {
+let lastRetention = 0;
+function runPrune() {
+  const retentionDays = db.getRetentionDays();
+  if (retentionDays !== lastRetention) {
+    console.log(`[prune] retention ${lastRetention}d → ${retentionDays}d`);
+    lastRetention = retentionDays;
+  }
   try {
     const n = db.prune(retentionDays);
-    if (n > 0) console.log(`[prune] removed ${n} old metrics`);
+    if (n > 0) console.log(`[prune] removed ${n} old metrics (retention ${retentionDays}d)`);
     pruneFails = 0;
   } catch (e) {
     console.error('[prune] error', e.message);
@@ -181,7 +199,9 @@ setInterval(() => {
       pruneFails = 0;
     }
   }
-}, 3600 * 1000);
+}
+runPrune();
+setInterval(runPrune, 3600 * 1000);
 
 const PORT = Number(process.env.PORT || 8080);
 const server = app.listen(PORT, () => {

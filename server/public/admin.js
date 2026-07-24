@@ -934,6 +934,8 @@ async function openSettings() {
     $('a_cpu').value = al.cpu_pct;
     $('a_mem').value = al.mem_pct;
     $('a_offline').value = al.offline_sec;
+    // 数据保留天数（后台设置优先，缺省回退到环境变量默认 30）
+    if ($('a_retention')) $('a_retention').value = appSettings.retention_days || 30;
     $('p_enabled').checked = !!appSettings.public_enabled;
     $('s_allow_ips').value = appSettings.admin_allow_ips || '';
     populateThemeSelect();
@@ -1017,7 +1019,9 @@ async function saveSettings() {
       cpu_pct: Number($('a_cpu').value) || al.cpu_pct,
       mem_pct: Number($('a_mem').value) || al.mem_pct,
       offline_sec: Number($('a_offline').value) || al.offline_sec
-    }
+    },
+    // 数据保留天数：写入 ui_settings.retention_days，服务下次清理时自动生效
+    retention_days: Math.min(3650, Math.max(7, Math.floor(Number($('a_retention')?.value) || 30)))
   };
   const notify = {
     smtp_host: $('n_smtp_host').value.trim(),

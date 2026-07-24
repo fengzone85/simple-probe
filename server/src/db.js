@@ -181,7 +181,8 @@ const updateAgent = (id, f) => stmts.updateAgent.run({
   expire_at: f.expire_at || '',
   monthly_quota_gb: Number(f.monthly_quota_gb) || 0,
   grp: f.grp || '',
-  country: (f.country || '').toUpperCase().slice(0, 2)
+  country: (f.country || '').toUpperCase().slice(0, 2),
+  probe_targets: f.probe_targets || ''
 });
 
 const deleteAgent = (id) => {
@@ -226,7 +227,7 @@ const set2FAEnabled = (b) => setConfig(TWOFA_ENABLED, b ? '1' : '0');
 const SETTINGS_KEY = 'ui_settings';
 const NOTIFY_KEY = 'notify_config';
 function getUiSettings() {
-  const def = { site_title: '', site_url: '', custom_css: '', default_sort: 'created', group_order: [], agent_server_url: '', admin_allow_ips: '', alert: { cpu_pct: 90, mem_pct: 90, offline_sec: 60 }, public_enabled: false, home_layout: 'grid', public_theme: 'default', probe_targets: '移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8' };
+  const def = { site_title: '', site_url: '', custom_css: '', default_sort: 'created', group_order: [], agent_server_url: '', admin_allow_ips: '', alert: { cpu_pct: 90, mem_pct: 90, offline_sec: 60 }, public_enabled: false, home_layout: 'grid', public_theme: 'default', probe_targets: '移动:211.136.192.6,电信:101.226.4.6,联通:202.106.0.20,公共:8.8.8.8', retention_days: 30 };
   try {
     const o = JSON.parse(getConfig(SETTINGS_KEY) || '{}');
     const merged = Object.assign(def, o);
@@ -264,11 +265,32 @@ function setNotifyConfig(incoming) {
   setConfig(NOTIFY_KEY, JSON.stringify(merged));
 }
 
+// 数据保留天数：优先级为「显式存储的 DB 值 > 环境变量 RETENTION_DAYS > 硬编码默认 30」。
+// 返回 [7, 3650] 范围内整数，超出则钳制，解析失败回退下一级。
+function getRetentionDays() {
+  // ① 仅当用户在后台显式设置过（非默认合并值）才优先使用
+  try {
+    const raw = getConfig(SETTINGS_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && o.retention_days !== undefined && o.retention_days !== null && o.retention_days !== '') {
+        const n = Number(o.retention_days);
+        if (Number.isFinite(n) && n > 0) return Math.min(3650, Math.max(7, Math.floor(n)));
+      }
+    }
+  } catch (e) {}
+  // ② 回退到环境变量
+  const env = Number(process.env.RETENTION_DAYS);
+  if (Number.isFinite(env) && env > 0) return Math.min(3650, Math.max(7, Math.floor(env)));
+  // ③ 最终默认
+  return 30;
+}
+
 module.exports = {
   db, hashToken, genToken,
   createAgent, getAgent, getAgents, updateAgent, deleteAgent, resetAgentToken,
   touchAgent, insertMetric, getLatestMetric, getMetrics, getMetricsAll,
   prune, getAlertState, setAlertState, clearAlertState,
   getConfig, setConfig, setConfigIfAbsent, get2FASecret, is2FAEnabled, set2FASecret, set2FAEnabled,
-  getUiSettings, setUiSettings, getNotifyConfig, setNotifyConfig
+  getUiSettings, setUiSettings, getNotifyConfig, setNotifyConfig, getRetentionDays
 };
