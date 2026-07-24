@@ -1246,7 +1246,11 @@ function start2FASetup() {
     $('tfaSecret').textContent = '正在生成密钥…';
     api('/api/admin/2fa/setup').then(r => {
       $('tfaSecret').textContent = '密钥（手动输入到 Authenticator 应用）：\n' + r.secret + '\n\n' + r.otpauth_uri;
-    }).catch(e => toast('设置失败：' + e.message));
+    }).catch(e => {
+      // 错误直接显示在面板中，让用户看到具体原因（如 HTTPS 要求）
+      $('tfaSecret').textContent = '生成失败：' + e.message + '\n\n请确认已通过 HTTPS 访问后台（或设置 ADMIN_ALLOW_HTTP=1），然后重试。';
+      toast('设置失败：' + e.message);
+    });
     $('tfaEnable').textContent = '确认启用';
     $('tfaEnable').onclick = enable2FA;
   }

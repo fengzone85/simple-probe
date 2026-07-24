@@ -2,7 +2,6 @@
 
 // 独立游客公开状态页逻辑（与后台 app.js 物理分离，仅调用免登录的 /api/public/*）
 const $ = (id) => document.getElementById(id);
-const BUILD_TIME = '2026/07/08 00:00:00 (GMT+8)';
 let publicAgents = [];
 let publicServerOrder = []; // 后台保存的全局卡片顺序（管理员拖拽后生效）
 let localOrder = [];        // 本机浏览器拖拽顺序（游客无管理员会话时的本地固定）
@@ -112,7 +111,9 @@ async function initPublic() {
     $pa.href = su ? (su.replace(/\/+$/, '') + '/admin.html') : '/admin.html';
   }
   document.title = title + ' · 状态页';
-  if ($('pvFooter')) $('pvFooter').innerHTML = 'Powered by ' + esc(title) + ' · Build Time: ' + BUILD_TIME;
+  if ($('pvFooter')) {
+    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener">Simple Probe</a>';
+  }
   if (!enabled) {
     if ($('pvOverview')) $('pvOverview').innerHTML = '';
     if ($('pvGrid')) $('pvGrid').innerHTML = '<div class="empty">本站暂未开放公开状态页</div>';
