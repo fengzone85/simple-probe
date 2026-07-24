@@ -35,19 +35,19 @@ SQLite 单文件。无需额外安装数据库服务。
 
 ### Q: 为什么没有远程控制功能？
 
-这是设计决策，不是缺失。Simple Probe 定位为纯状态监控，通过消除指令通道从架构层面杜绝 RCE 风险。
+这是设计决策，不是缺失。DiTing Lite 定位为纯状态监控，通过消除指令通道从架构层面杜绝 RCE 风险。
 
 如果需要远程控制，推荐使用哪吒或 Komari。
 
 ### Q: Agent 会被利用做 C2 吗？
 
-❌ 不会。Simple Probe Agent：
+❌ 不会。DiTing Lite Agent：
 - 不监听任何端口
 - 不接收任何指令
 - 不与其他 Agent 通信
 - 仅采集系统状态（无进程列表、无配置、无密钥）
 
-攻击者无法将 Simple Probe Agent 变为 C2 控制端。
+攻击者无法将 DiTing Lite Agent 变为 C2 控制端。
 
 ### Q: 忘记 2FA 怎么办？
 
@@ -83,7 +83,7 @@ SQLite 单文件。无需额外安装数据库服务。
 
 **核心区别在信任模型**：
 - 哪吒：服务端可向 Agent 下发指令（Web 终端、计划任务）
-- Simple Probe：服务端无法向 Agent 下发任何指令
+- DiTing Lite：服务端无法向 Agent 下发任何指令
 
 
 ### Q: 支持多用户吗？

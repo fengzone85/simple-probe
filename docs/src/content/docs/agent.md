@@ -5,7 +5,7 @@ description: Agent 部署指南
 
 # 受控端部署
 
-Simple Probe 受控端支持两种部署形态，代码完全相同，仅部署方式不同。
+DiTing Lite 受控端支持两种部署形态，代码完全相同，仅部署方式不同。
 
 ## 形态对比
 

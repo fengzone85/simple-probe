@@ -1,6 +1,6 @@
 <h1 align="center">
   <img src="server/public/os-debian.svg" width="40" alt="logo">
-  <br>谛听轻量探针 · Simple Probe
+  <br>谛听轻量探针 · DiTing Lite
 </h1>
 
 <p align="center">

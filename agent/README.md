@@ -1,4 +1,4 @@
-# Simple Probe Agent
+# DiTing Lite Agent
 
 受控端（Agent），负责在被控机器上采集系统指标并**只出站**上报给服务端。
 与 Windows Agent **完全相同的上报协议**，服务端无需任何改动。

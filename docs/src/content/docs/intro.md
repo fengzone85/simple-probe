@@ -1,15 +1,15 @@
 ---
 title: 简介
-description: Simple Probe — 轻量、安全、自托管的服务器监控系统
+description: DiTing Lite — 轻量、安全、自托管的服务器监控系统
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-# Simple Probe
+# DiTing Lite
 
 **轻量、安全、自托管的服务器监控系统。**
 
-Simple Probe 是一个纯状态监控方案，专注于「在线/负载/CPU/内存/硬盘/流量」等核心指标，
+DiTing Lite 是一个纯状态监控方案，专注于「在线/负载/CPU/内存/硬盘/流量」等核心指标，
 不带远程控制、不带指令通道，从架构层面消除 RCE 风险。
 
 ## 核心特性

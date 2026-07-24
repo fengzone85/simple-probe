@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: 5 分钟部署 Simple Probe
+description: 5 分钟部署 DiTing Lite
 ---
 
 # 快速开始

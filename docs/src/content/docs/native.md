@@ -45,7 +45,7 @@ curl -fsSL ... | bash -s -- --token "YOUR_TOKEN" --url "https://monitor.example.
 
 ```ini
 [Unit]
-Description=Simple Probe Agent
+Description=DiTing Lite Agent
 After=network-online.target
 Wants=network-online.target
 

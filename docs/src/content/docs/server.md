@@ -90,7 +90,7 @@ sudo bash install.sh --restore /path/to/monitor_backup.db
 
 ```ini
 [Unit]
-Description=Simple Probe Server
+Description=DiTing Lite Server
 After=network.target
 
 [Service]

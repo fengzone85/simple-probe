@@ -5,7 +5,7 @@ description: 各平台安装方式汇总
 
 # 安装指南
 
-Simple Probe 支持多种部署方式，按需选择。
+DiTing Lite 支持多种部署方式，按需选择。
 
 ## 方式对比
 

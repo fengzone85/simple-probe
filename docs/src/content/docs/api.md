@@ -1,11 +1,11 @@
 ---
 title: API 接口
-description: Simple Probe REST API 参考
+description: DiTing Lite REST API 参考
 ---
 
 # API 接口
 
-Simple Probe 服务端提供 REST API，所有接口需 Bearer Token 鉴权。
+DiTing Lite 服务端提供 REST API，所有接口需 Bearer Token 鉴权。
 
 ## 鉴权
 

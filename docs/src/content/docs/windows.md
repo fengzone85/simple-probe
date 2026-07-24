@@ -5,7 +5,7 @@ description: Windows 受控端部署
 
 # Windows 部署
 
-Simple Probe 受控端支持 Windows，使用 psutil 采集系统指标。
+DiTing Lite 受控端支持 Windows，使用 psutil 采集系统指标。
 
 ## 前置条件
 

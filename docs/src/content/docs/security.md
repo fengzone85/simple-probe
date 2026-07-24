@@ -1,11 +1,11 @@
 ---
 title: 安全设计
-description: Simple Probe 安全架构与加固措施
+description: DiTing Lite 安全架构与加固措施
 ---
 
 # 安全设计
 
-Simple Probe 的安全模型建立在三个支柱之上。
+DiTing Lite 的安全模型建立在三个支柱之上。
 
 ## 三大支柱
 
@@ -91,7 +91,7 @@ sudo bash install.sh --backup
 
 ## TOTP 2FA
 
-Simple Probe 支持 TOTP（基于时间的一次性密码），兼容 Google Authenticator、1Password 等。
+DiTing Lite 支持 TOTP（基于时间的一次性密码），兼容 Google Authenticator、1Password 等。
 
 ### 启用流程
 
