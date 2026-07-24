@@ -48,7 +48,7 @@
 - 维护约定：以后每次改脚本行为，同步 +1 版本号、更新日期与要点。
 
 ## 仓库卫生：从公开仓库移除测试 SQLite 库（2026-07-09）
-- 现象：公开仓库 `fengzone85/simple-probe` 的历史提交 `b27bc0a`（READONLY_TOKEN）曾把 `server/tmp_auth_test.db`、`server/tmp_http.db` 提交并 push。
+- 现象：公开仓库 `fengzone85/diting` 的历史提交 `b27bc0a`（READONLY_TOKEN）曾把 `server/tmp_auth_test.db`、`server/tmp_http.db` 提交并 push。
 - 内容核实：
   - `tmp_http.db` 的 `admin_config` 含 `admin_2fa_secret = REDACTED`（base32）与一条 agent 记录（`token_hash` 前缀 `d0b3789…33af0`，id `agt_7525d0d18e80`，name `t2`）。
   - `tmp_auth_test.db` 仅 schema、无数据行。

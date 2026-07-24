@@ -18,7 +18,7 @@ Simple Probe 受控端支持 Windows，使用 psutil 采集系统指标。
 
 ```powershell
 cd C:\
-git clone https://github.com/fengzone85/simple-probe.git
+git clone https://github.com/fengzone85/diting.git
 cd simple-probe\agent\windows
 .\install.ps1
 ```

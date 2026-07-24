@@ -14,7 +14,7 @@ description: 5 分钟部署 Simple Probe
 ## 方式 1：Docker 部署（推荐）
 
 ```bash
-git clone https://github.com/fengzone85/simple-probe.git
+git clone https://github.com/fengzone85/diting.git
 cd simple-probe
 docker compose up -d
 ```
@@ -26,7 +26,7 @@ docker compose up -d
 ## 方式 2：原生 Node 部署
 
 ```bash
-git clone https://github.com/fengzone85/simple-probe.git
+git clone https://github.com/fengzone85/diting.git
 cd simple-probe/server
 npm install
 npm start
@@ -50,7 +50,7 @@ docker run -d \
 ### Linux（原生 systemd）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/main/agent/install.sh | bash
 ```
 
 按提示输入 Server URL 和 Token 即可。

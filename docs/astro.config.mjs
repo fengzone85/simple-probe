@@ -8,7 +8,7 @@ export default defineConfig({
       title: 'Simple Probe',
       description: '轻量自托管服务器监控',
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/fengzone85/simple-probe' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/fengzone85/diting' },
       ],
       sidebar: [
         {

@@ -21,7 +21,7 @@ description: 服务端配置与管理
 version: '3'
 services:
   server:
-    image: ghcr.io/fengzone85/simple-probe:latest
+    image: ghcr.io/fengzone85/diting:latest
     ports:
       - "3000:3000"
     volumes:

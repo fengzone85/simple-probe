@@ -52,7 +52,7 @@
 ## 部署
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/master/install.sh -o install.sh
 chmod +x install.sh
 sudo ./install.sh
 ```
@@ -61,7 +61,7 @@ sudo ./install.sh
 
 ## 地址
 
-项目仓库：https://github.com/fengzone85/simple-probe
+项目仓库：https://github.com/fengzone85/diting
 
 ## 最后
 

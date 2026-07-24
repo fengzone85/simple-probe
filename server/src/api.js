@@ -125,8 +125,8 @@ router.post('/setup/generate', setupRateLimit, (req, res) => {
 // ② Docker 版（现场从源码 git 构建镜像并运行，无需任何仓库账号）；
 // ③ Windows 版（PowerShell 一键：下载 install.ps1 → 自举拉取 agent 载荷 → 注册计划任务）。
 // 仓库 raw 基址（install.sh 位于根，agent 载荷位于 <base>/agent/）；可用 AGENT_RAW_REPO 覆盖。
-const REPO_BASE = (process.env.AGENT_RAW_REPO || 'https://raw.githubusercontent.com/fengzone85/simple-probe/master').replace(/\/+$/, '');
-const AGENT_GIT_REPO = process.env.AGENT_GIT_REPO || 'https://github.com/fengzone85/simple-probe.git#master:agent';
+const REPO_BASE = (process.env.AGENT_RAW_REPO || 'https://raw.githubusercontent.com/fengzone85/diting/master').replace(/\/+$/, '');
+const AGENT_GIT_REPO = process.env.AGENT_GIT_REPO || 'https://github.com/fengzone85/diting.git#master:agent';
 const AGENT_INTERVAL_DEFAULT = Number(process.env.AGENT_INTERVAL || 15);
 
 // 受控端接入用的服务端公网地址：优先级为

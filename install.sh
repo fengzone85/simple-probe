@@ -7,7 +7,7 @@
 #   # 最小化镜像可能未预装 curl，先安装（仅 Debian/Ubuntu 等 apt 系统需要）
 #   apt-get update && apt-get install -y curl
 #   # 下载安装脚本（默认分支 master）
-#   curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/master/install.sh -o install.sh
 #   chmod +x install.sh
 #   sudo ./install.sh
 #
@@ -50,8 +50,8 @@ SCRIPT_NOTES="更新服务端前先释放端口(修复8080占用)；更新后重
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
-REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/simple-probe/master}"
-REPO_GIT="${REPO_GIT:-https://github.com/fengzone85/simple-probe.git}"
+REPO_RAW="${REPO_RAW:-https://raw.githubusercontent.com/fengzone85/diting/master}"
+REPO_GIT="${REPO_GIT:-https://github.com/fengzone85/diting.git}"
 SRC_DIR="/opt/simple-probe-src"
 
 # ── 非交互参数（供 CI / 批量部署）─────────────────────────────────────────────

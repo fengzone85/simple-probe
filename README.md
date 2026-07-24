@@ -1,6 +1,6 @@
 # 谛听轻量探针 · 自托管 Docker 监控（哪吒替代）
 
-> 项目仓库：https://github.com/fengzone85/simple-probe ｜ [English](README_EN.md)
+> 项目仓库：https://github.com/fengzone85/diting ｜ [English](README_EN.md)
 
 被控端以 **Docker 容器** 跑在每台受控 VPS 上，**只对外发起 HTTPS 回传**，不在受控端开放任何入站端口、不提供远程执行功能。数据只进入你自己的**独立专用 VPS**，由服务端提供精美仪表盘，并可向 QQ 邮箱 / Telegram 推送离线/超阈值告警。
 
@@ -10,7 +10,7 @@
 # 1) 最小化镜像（如 Debian 13）可能未预装 curl，先安装（仅 apt 系系统需要；已装可跳过）
 apt-get update && apt-get install -y curl
 # 2) 下载安装脚本（默认分支 master）
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/master/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/master/install.sh -o install.sh
 # 3) 赋权并运行（先下载成文件，便于审阅后再执行）
 chmod +x install.sh
 sudo ./install.sh

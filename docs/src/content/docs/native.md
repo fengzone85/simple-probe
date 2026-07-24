@@ -20,7 +20,7 @@ description: 无 Docker 的原生 systemd 部署方式
 ## 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/main/agent/install.sh | bash
 ```
 
 支持交互模式和非交互模式：

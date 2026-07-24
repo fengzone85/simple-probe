@@ -25,7 +25,7 @@ param(
     [int]$Interval = 15,
     [string]$ProbeTargets = '',
     [switch]$RegisterTask,
-    [string]$Repo = 'https://raw.githubusercontent.com/fengzone85/simple-probe/master/agent/windows'
+    [string]$Repo = 'https://raw.githubusercontent.com/fengzone85/diting/master/agent/windows'
 )
 
 $ErrorActionPreference = 'Stop'

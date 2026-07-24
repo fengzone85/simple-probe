@@ -56,7 +56,7 @@ download_list() {
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 INTERVAL=15
-REPO="https://raw.githubusercontent.com/fengzone85/simple-probe/master/agent"
+REPO="https://raw.githubusercontent.com/fengzone85/diting/master/agent"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {

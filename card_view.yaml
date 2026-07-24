@@ -6,7 +6,7 @@
     - generic [ref=e7]:
       - button "☀️" [ref=e8] [cursor=pointer]
       - link "GitHub" [ref=e9] [cursor=pointer]:
-        - /url: https://github.com/fengzone85/simple-probe
+        - /url: https://github.com/fengzone85/diting
       - link "进入后台" [ref=e12] [cursor=pointer]:
         - /url: https://tz.222.blue/admin.html
   - generic [ref=e16]:

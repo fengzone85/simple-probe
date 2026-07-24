@@ -20,7 +20,7 @@ Simple Probe 支持多种部署方式，按需选择。
 ### Docker 部署
 
 ```bash
-git clone https://github.com/fengzone85/simple-probe.git
+git clone https://github.com/fengzone85/diting.git
 cd simple-probe
 cp .env.example .env
 # 编辑 .env 设置 SETUP_TOKEN、域名等
@@ -30,7 +30,7 @@ docker compose up -d
 ### 原生部署
 
 ```bash
-git clone https://github.com/fengzone85/simple-probe.git
+git clone https://github.com/fengzone85/diting.git
 cd simple-probe/server
 npm install --production
 cp .env.example .env

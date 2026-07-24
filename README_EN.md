@@ -1,6 +1,6 @@
 # DiTing · Self-hosted Docker Monitor (Nezha alternative)
 
-> Repository: https://github.com/fengzone85/simple-probe
+> Repository: https://github.com/fengzone85/diting
 
 The agent runs as a **Docker container** on each monitored VPS. It **only makes outbound HTTPS reports** — no inbound ports are opened on the monitored host, and no remote-execution capability exists. Data flows only into **your own dedicated VPS**, where the server renders a polished dashboard and can push offline / threshold-exceeded alerts to a QQ Mail inbox or Telegram.
 

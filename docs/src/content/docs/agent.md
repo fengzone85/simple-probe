@@ -35,7 +35,7 @@ docker run -d \
 ## 原生 systemd 部署
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/main/agent/install.sh | bash
 ```
 
 脚本会：
@@ -128,7 +128,7 @@ SERVER_URL=https://1.2.3.4:4443
 ## 卸载
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fengzone85/simple-probe/main/agent/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fengzone85/diting/main/agent/uninstall.sh | bash
 ```
 
 完全幂等，可重复执行。

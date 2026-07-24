@@ -112,7 +112,7 @@ async function initPublic() {
   }
   document.title = title + ' ' + I18N.t('public.page_title_suffix');
   if ($('pvFooter')) {
-    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/simple-probe" target="_blank" rel="noopener">DiTing</a><span id="fvVer" style="margin-left:6px;color:var(--muted);font-size:11px"></span>';
+    $('pvFooter').innerHTML = 'Powered by <a href="https://github.com/fengzone85/diting" target="_blank" rel="noopener">DiTing</a><span id="fvVer" style="margin-left:6px;color:var(--muted);font-size:11px"></span>';
   }
   // 异步加载版本信息
   fetch('/api/version').then(r => r.json()).then(function (v) {

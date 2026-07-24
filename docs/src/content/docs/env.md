@@ -58,7 +58,7 @@ PROBE_TARGETS=1.1.1.1:443,8.8.8.8:443
 version: '3'
 services:
   server:
-    image: ghcr.io/fengzone85/simple-probe:latest
+    image: ghcr.io/fengzone85/diting:latest
     ports:
       - "3000:3000"
     volumes:
