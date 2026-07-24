@@ -1,5 +1,9 @@
 # Changelog
 
+## 受控端多盘识别兼容增强：支持仅挂 /host 的部署（2026-07-24）
+- 在「修复 Docker 形态多盘识别」基础上，将 `disk_list` 的 `mounts_path` 选择逻辑改为：Docker 形态始终读取**容器 mount 命名空间视图**（优先 `/hostproc/mounts`，否则回退容器自身 `/proc/mounts`），二者宿主真实盘均以 `/host` 前缀出现；**不再回退到 `/host/proc/mounts`**（那是宿主视图，宿主盘无 `/host` 前缀，会被前缀过滤全部跳过、读不到任何盘）。从而使 README 中仅挂 `-v /:/host:ro`（不挂 `/hostproc`）的示例也能正确识别多块硬盘。
+- 配套：`Dockerfile` 将 `apt` 安装 ping 前置为独立层，agent 代码改动不再使 apt 缓存失效（离线/弱网可复用缓存）；`README.md` 受控端 Docker 部署段落补充多盘识别原理与可选 `-v /proc:/hostproc:ro`。
+
 ## 修复受控端 Docker 形态下多盘识别错误（2026-07-24）
 - 现象：Docker 部署的受控端在 dashboard 看不到宿主真实磁盘（根盘与第二块数据盘缺失），且 docker 状态卷被误报为一块盘。
 - 根因：`/hostproc/mounts` 实际是容器 mount 命名空间视图，宿主真实盘在里面临时带 `/host` 前缀（如 `/host`、`/host/data`）；`disk_list` 又盲拼一次 `/host` 前缀变成 `/host/host/...`，导致 `isdir` 全 False、宿主盘全部被跳过，而容器内 docker 卷 `/data`（无前缀）反而被当成真实盘误报。
